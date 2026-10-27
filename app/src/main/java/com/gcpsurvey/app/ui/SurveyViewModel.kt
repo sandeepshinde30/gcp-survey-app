@@ -11,6 +11,7 @@ import com.gcpsurvey.app.data.GcpSurveyEntity
 import com.gcpsurvey.app.export.CsvExporter
 import com.gcpsurvey.app.network.LocalHotspotServer
 import com.gcpsurvey.app.network.LocalOnlyHotspotManager
+import com.gcpsurvey.app.network.HotspotInfoState
 import com.google.android.gms.location.FusedLocationProviderClient
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
@@ -21,6 +22,7 @@ import kotlinx.coroutines.launch
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.*
+
 
 data class SessionState(
     val hotelLat: Double? = null,
@@ -38,14 +40,7 @@ data class SessionState(
 )
 
 // यह क्लास गायब थी, इसे जोड़ दिया गया है
-data class HotspotInfoState(
-    val isActive: Boolean = false,
-    val ssid: String = "GCP-SURVEY-AP",
-    val password: String = "survey@field2026",
-    val ipAddress: String = "192.168.43.1",
-    val port: Int = 8080,
-    val fullUrl: String = "http://192.168.43.1:8080"
-)
+
 
 class SurveyViewModel(application: Application) : AndroidViewModel(application) {
     private val dao = GcpDatabase.getDatabase(application).gcpDao()
