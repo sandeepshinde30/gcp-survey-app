@@ -27,6 +27,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import android.net.Uri
+import androidx.core.content.FileProvider
+import java.io.File
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -214,6 +217,25 @@ fun SurveyFormScreen(
     var obsSeconds by remember { mutableStateOf(0) }
     var startTimeString by remember { mutableStateOf("") }
     var endTimeString by remember { mutableStateOf("") }
+    
+    // --- कैमरा खोलने का नया कोड ---
+    var currentPhotoUri by remember { mutableStateOf<Uri?>(null) }
+    var currentPhotoSlot by remember { mutableStateOf("") }
+
+    val cameraLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.TakePicture()
+    ) { success ->
+        if (success && currentPhotoUri != null) {
+            val file = File(currentPhotoUri!!.path!!)
+            // पहले GPS लोकेशन लेंगे, फिर फोटो में डालेंगे
+            viewModel.takeGeotaggedPhoto(context, currentPhotoSlot) { location ->
+                if (location != null) {
+                    com.gcpsurvey.app.camera.PhotoGeotagManager.injectGpsCoordinates(file, location)
+                }
+                Toast.makeText(context, "Photo Saved: $currentPhotoSlot", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
 
     LaunchedEffect(isObserving) {
         if (isObserving) {
@@ -494,7 +516,14 @@ fun SurveyFormScreen(
                     rowSlots.forEach { slot ->
                         OutlinedButton(
                             onClick = {
-                                viewModel.takeGeotaggedPhoto(context, slot)
+                                currentPhotoSlot = slot
+                                val photoDir = File(context.getExternalFilesDir(android.os.Environment.DIRECTORY_DOCUMENTS), "GCP_Survey/$hierarchyFolder")
+                                if (!photoDir.exists()) photoDir.mkdirs()
+                                
+                                val photoFile = File(photoDir, "${slot.replace(" ", "_")}_${System.currentTimeMillis()}.jpg")
+                                currentPhotoUri = FileProvider.getUriForFile(context, "${context.packageName}.provider", photoFile)
+                                
+                                cameraLauncher.launch(currentPhotoUri)
                             },
                             modifier = Modifier.weight(1f)
                         ) {
