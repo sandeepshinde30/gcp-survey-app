@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import com.gcpsurvey.app.network.HotspotInfoState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -344,11 +345,4 @@ fun copyToClipboard(context: Context, label: String, text: String) {
     Toast.makeText(context, "$label copied to clipboard", Toast.LENGTH_SHORT).show()
 }
 
-data class HotspotInfoState(
-    val isActive: Boolean = false,
-    val ssid: String = "GCP-SURVEY-AP",
-    val password: String = "survey@field2026",
-    val ipAddress: String = "192.168.43.1",
-    val port: Int = 8080,
-    val fullUrl: String = "http://192.168.43.1:8080"
-)
+
