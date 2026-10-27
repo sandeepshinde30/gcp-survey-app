@@ -37,6 +37,16 @@ data class SessionState(
     val previousPointLabel: String = "Hotel"
 )
 
+// यह क्लास गायब थी, इसे जोड़ दिया गया है
+data class HotspotInfoState(
+    val isActive: Boolean = false,
+    val ssid: String = "GCP-SURVEY-AP",
+    val password: String = "survey@field2026",
+    val ipAddress: String = "192.168.43.1",
+    val port: Int = 8080,
+    val fullUrl: String = "http://192.168.43.1:8080"
+)
+
 class SurveyViewModel(application: Application) : AndroidViewModel(application) {
     private val dao = GcpDatabase.getDatabase(application).gcpDao()
     val allRecords = dao.getAllRecords()
@@ -56,7 +66,7 @@ class SurveyViewModel(application: Application) : AndroidViewModel(application) 
 
     fun startHotspotAndServer(context: Context) {
         hotspotManager.startHotspot(
-            onSuccess = { info ->
+            onSuccess = { info: HotspotInfoState ->
                 _hotspotState.value = info
                 localServer.start()
             },
