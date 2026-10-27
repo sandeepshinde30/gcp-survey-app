@@ -19,7 +19,7 @@ jobs:
 
     - name: Unzip Project
       run: |
-        unzip "*.zip" -d extracted_app
+        unzip app.zip -d extracted_app
         cd extracted_app
         if [ -d "my_app" ]; then cd my_app; fi
         cp -r . ../../ 
