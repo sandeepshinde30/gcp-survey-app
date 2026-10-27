@@ -17,6 +17,11 @@ jobs:
       with:
         packages: 'platform-tools' 
         
+    - name: Download Gradle Wrapper JAR
+      run: |
+        mkdir -p gradle/wrapper
+        curl -L -o gradle/wrapper/gradle-wrapper.jar https://raw.githubusercontent.com/gradle/gradle/master/gradle/wrapper/gradle-wrapper.jar
+        
     - name: Make gradlew executable
       run: chmod +x gradlew
       
