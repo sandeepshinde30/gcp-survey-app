@@ -17,13 +17,16 @@ jobs:
       with:
         packages: 'platform-tools' 
 
-    - name: Unzip Project
+    - name: Unzip and List Files
       run: |
-        unzip app.zip -d extracted_app
-        cd extracted_app
-        if [ -d "my_app" ]; then cd my_app; fi
-        cp -r . ../../ 
-        
+        unzip app.zip -d temp_app
+        echo "--- ZIP के अंदर की फाइलें ---"
+        ls -R temp_app
+        cp -r temp_app/* ./
+        cp -r temp_app/.* ./ 2>/dev/null || true
+        echo "--- मुख्य फोल्डर की फाइलें ---"
+        ls -la
+
     - name: Make gradlew executable
       run: chmod +x gradlew
       
