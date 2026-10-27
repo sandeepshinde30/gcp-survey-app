@@ -14,8 +14,9 @@ jobs:
 
     - name: Setup Android SDK
       uses: android-actions/setup-android@v3
+      with:
+        packages: 'platform-tools' 
 
-    # यह स्टेप आपकी अपलोड की गई ZIP फाइल को Unzip करेगा
     - name: Unzip Project
       run: |
         unzip "*.zip" -d extracted_app
