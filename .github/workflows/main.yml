@@ -16,13 +16,6 @@ jobs:
       uses: android-actions/setup-android@v3
       with:
         packages: 'platform-tools' 
-
-    - name: Unzip Project
-      run: |
-        unzip project.zip -d temp_dir
-        cd temp_dir
-        # यह सुनिश्चित करेगा कि सभी फाइलें मुख्य फोल्डर में आ जाएं
-        cp -r . ../
         
     - name: Make gradlew executable
       run: chmod +x gradlew
