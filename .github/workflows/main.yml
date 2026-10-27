@@ -12,11 +12,26 @@ jobs:
         java-version: '17'
         distribution: 'temurin'
 
-    - name: Unzip and Inspect (Debug Step)
+    - name: Setup Android SDK
+      uses: android-actions/setup-android@v3
+      with:
+        packages: 'platform-tools' 
+
+    - name: Unzip Project
       run: |
-        echo "--- फाइलें अनज़िप कर रहे हैं ---"
-        unzip app.zip -d temp_app
-        echo "--- temp_app के अंदर क्या है? ---"
-        ls -la temp_app
-        echo "--- क्या gradlew कहीं है? ---"
-        find . -name "gradlew"
+        unzip project.zip -d temp_dir
+        cd temp_dir
+        # यह सुनिश्चित करेगा कि सभी फाइलें मुख्य फोल्डर में आ जाएं
+        cp -r . ../
+        
+    - name: Make gradlew executable
+      run: chmod +x gradlew
+      
+    - name: Build with Gradle
+      run: ./gradlew assembleDebug
+      
+    - name: Upload APK
+      uses: actions/upload-artifact@v4
+      with:
+        name: app-debug-apk
+        path: app/build/outputs/apk/debug/app-debug.apk
