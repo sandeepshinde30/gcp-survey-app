@@ -11,6 +11,17 @@ jobs:
       with:
         java-version: '17'
         distribution: 'temurin'
+
+    - name: Setup Android SDK
+      uses: android-actions/setup-android@v3
+
+    # यह स्टेप आपकी अपलोड की गई ZIP फाइल को Unzip करेगा
+    - name: Unzip Project
+      run: |
+        unzip "*.zip" -d extracted_app
+        cd extracted_app
+        if [ -d "my_app" ]; then cd my_app; fi
+        cp -r . ../../ 
         
     - name: Make gradlew executable
       run: chmod +x gradlew
