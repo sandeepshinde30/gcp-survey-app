@@ -1,0 +1,6 @@
+{
+  "name": "GCP Field Survey & Point Tracker",
+  "description": "Native Android offline survey app for Ground Control Point (GCP) data collection with point-to-point distance tracking, GPS capture, EXIF photo geotagging, local SQLite database, and CSV export.",
+  "requestFramePermissions": ["camera", "geolocation"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
