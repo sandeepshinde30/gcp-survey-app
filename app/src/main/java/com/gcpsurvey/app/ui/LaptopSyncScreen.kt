@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import com.gcpsurvey.app.network.HotspotInfoState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -24,8 +23,9 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.FileProvider
 import com.gcpsurvey.app.network.BluetoothTransferHelper
-import java.io.File
+import com.gcpsurvey.app.network.HotspotInfoState
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -222,22 +222,65 @@ fun ModeAHotspotWebServer(
 
                 Text("Laptop Browser Portal Buttons Available at this URL:", fontSize = 11.sp, color = Color(0xFF94A3B8), fontWeight = FontWeight.SemiBold)
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    // 1. All Photos ZIP Button
                     FilledTonalButton(
-                        onClick = { viewModel.exportPhotosZip(context) },
+                        onClick = { 
+                            viewModel.exportPhotosZip(context) { file -> 
+                                if (file != null) {
+                                    val uri = FileProvider.getUriForFile(context, "${context.packageName}.provider", file)
+                                    val intent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                                        type = "application/zip"
+                                        putExtra(android.content.Intent.EXTRA_STREAM, uri)
+                                        addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                    }
+                                    context.startActivity(android.content.Intent.createChooser(intent, "Share All Photos (.zip)"))
+                                } else {
+                                    Toast.makeText(context, "No Photos Found to Zip", Toast.LENGTH_SHORT).show()
+                                }
+                            } 
+                        },
                         modifier = Modifier.weight(1f),
                         contentPadding = PaddingValues(4.dp)
                     ) {
                         Text("All Photos (.zip)", fontSize = 10.sp, maxLines = 1)
                     }
+
+                    // 2. Master Excel Button
                     FilledTonalButton(
-                        onClick = { viewModel.exportExcelXls(context) },
+                        onClick = { 
+                            viewModel.exportExcelXls(context) { file -> 
+                                if (file != null) {
+                                    val uri = FileProvider.getUriForFile(context, "${context.packageName}.provider", file)
+                                    val intent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                                        type = "application/vnd.ms-excel"
+                                        putExtra(android.content.Intent.EXTRA_STREAM, uri)
+                                        addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                    }
+                                    context.startActivity(android.content.Intent.createChooser(intent, "Open/Share Excel"))
+                                }
+                            } 
+                        },
                         modifier = Modifier.weight(1f),
                         contentPadding = PaddingValues(4.dp)
                     ) {
                         Text("Master Excel (.xls)", fontSize = 10.sp, maxLines = 1)
                     }
+
+                    // 3. Database CSV Button
                     FilledTonalButton(
-                        onClick = { viewModel.exportCsv(context) },
+                        onClick = { 
+                            viewModel.exportCsv(context) { file -> 
+                                if (file != null) {
+                                    val uri = FileProvider.getUriForFile(context, "${context.packageName}.provider", file)
+                                    val intent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                                        type = "text/csv"
+                                        putExtra(android.content.Intent.EXTRA_STREAM, uri)
+                                        addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                    }
+                                    context.startActivity(android.content.Intent.createChooser(intent, "Open/Share CSV"))
+                                }
+                            } 
+                        },
                         modifier = Modifier.weight(1f),
                         contentPadding = PaddingValues(4.dp)
                     ) {
@@ -271,8 +314,9 @@ fun ModeBBluetoothTransfer(context: Context, viewModel: SurveyViewModel) {
 
             Button(
                 onClick = {
-                    val file = viewModel.exportExcelXls(context)
-                    if (file != null) BluetoothTransferHelper.shareViaBluetooth(context, file)
+                    viewModel.exportExcelXls(context) { file ->
+                        if (file != null) BluetoothTransferHelper.shareViaBluetooth(context, file)
+                    }
                 },
                 modifier = Modifier.fillMaxWidth(),
                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF047857))
@@ -284,8 +328,9 @@ fun ModeBBluetoothTransfer(context: Context, viewModel: SurveyViewModel) {
 
             Button(
                 onClick = {
-                    val file = viewModel.exportCsv(context)
-                    if (file != null) BluetoothTransferHelper.shareViaBluetooth(context, file)
+                    viewModel.exportCsv(context) { file ->
+                        if (file != null) BluetoothTransferHelper.shareViaBluetooth(context, file)
+                    }
                 },
                 modifier = Modifier.fillMaxWidth(),
                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF334155))
@@ -297,8 +342,9 @@ fun ModeBBluetoothTransfer(context: Context, viewModel: SurveyViewModel) {
 
             Button(
                 onClick = {
-                    val file = viewModel.exportPhotosZip(context)
-                    if (file != null) BluetoothTransferHelper.shareViaBluetooth(context, file)
+                    viewModel.exportPhotosZip(context) { file ->
+                        if (file != null) BluetoothTransferHelper.shareViaBluetooth(context, file)
+                    }
                 },
                 modifier = Modifier.fillMaxWidth(),
                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1D4ED8))
@@ -344,5 +390,3 @@ fun copyToClipboard(context: Context, label: String, text: String) {
     clipboard.setPrimaryClip(clip)
     Toast.makeText(context, "$label copied to clipboard", Toast.LENGTH_SHORT).show()
 }
-
-
