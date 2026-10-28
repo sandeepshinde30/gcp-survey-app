@@ -248,29 +248,25 @@ class SurveyViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
-    fun exportCsv(context: Context): File? {
-        var exportedFile: File? = null
+       fun exportCsv(context: Context, onFileReady: (File?) -> Unit) {
         viewModelScope.launch {
             val records = dao.getAllRecordsSync()
-            exportedFile = CsvExporter.exportToCsv(context, records)
+            val file = CsvExporter.exportToCsv(context, records)
+            onFileReady(file)
         }
-        return exportedFile
     }
 
-    fun exportExcelXls(context: Context): File? {
-        var exportedFile: File? = null
+    fun exportExcelXls(context: Context, onFileReady: (File?) -> Unit) {
         viewModelScope.launch {
             val records = dao.getAllRecordsSync()
-            exportedFile = CsvExporter.exportToExcelXls(context, records)
+            val file = CsvExporter.exportToExcelXls(context, records)
+            onFileReady(file)
         }
-        return exportedFile
     }
 
-    fun exportPhotosZip(context: Context): File? {
-        var exportedFile: File? = null
+    fun exportPhotosZip(context: Context, onFileReady: (File?) -> Unit) {
         viewModelScope.launch {
-            exportedFile = CsvExporter.createPhotosZip(context)
+            val file = CsvExporter.createPhotosZip(context)
+            onFileReady(file)
         }
-        return exportedFile
     }
-}
