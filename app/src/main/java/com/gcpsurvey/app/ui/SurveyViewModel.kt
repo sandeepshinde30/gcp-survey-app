@@ -57,36 +57,70 @@ class SurveyViewModel(application: Application) : AndroidViewModel(application) 
     val hotspotState: StateFlow<HotspotInfoState> = _hotspotState.asStateFlow()
 
     fun startHotspotAndServer(context: Context) {
-        hotspotManager.startHotspot(
-            onSuccess = { info: HotspotInfoState ->
-                _hotspotState.value = info
+        try {
+            hotspotManager.startHotspot(
+                onSuccess = { info: HotspotInfoState ->
+                    _hotspotState.value = info
+                    try {
+                        localServer.start()
+                    } catch (e: Exception) {
+                        Toast.makeText(context, "Server Error: ${e.message}", Toast.LENGTH_LONG).show()
+                    }
+                },
+                onFailed = {
+                    val dynamicIp = "192.168.43.1"
+                    _hotspotState.value = HotspotInfoState(
+                        isActive = true,
+                        ssid = "GCP-SURVEY-AP",
+                        password = "survey@field2026",
+                        ipAddress = dynamicIp,
+                        port = 8080,
+                        fullUrl = "http://$dynamicIp:8080"
+                    )
+                    try {
+                        localServer.start()
+                    } catch (e: Exception) {
+                        Toast.makeText(context, "Server Error: ${e.message}", Toast.LENGTH_LONG).show()
+                    }
+                }
+            )
+        } catch (e: Exception) {
+            Toast.makeText(context, "Hotspot Error: ${e.message}", Toast.LENGTH_LONG).show()
+            val dynamicIp = "192.168.43.1"
+            _hotspotState.value = HotspotInfoState(
+                isActive = true,
+                ssid = "GCP-SURVEY-AP",
+                password = "survey@field2026",
+                ipAddress = dynamicIp,
+                port = 8080,
+                fullUrl = "http://$dynamicIp:8080"
+            )
+            try {
                 localServer.start()
-            },
-            onFailed = {
-                val dynamicIp = "192.168.43.1"
-                _hotspotState.value = HotspotInfoState(
-                    isActive = true,
-                    ssid = "GCP-SURVEY-AP",
-                    password = "survey@field2026",
-                    ipAddress = dynamicIp,
-                    port = 8080,
-                    fullUrl = "http://$dynamicIp:8080"
-                )
-                localServer.start()
+            } catch (ex: Exception) {
+                 Toast.makeText(context, "Server Error: ${ex.message}", Toast.LENGTH_LONG).show()
             }
-        )
+        }
     }
 
     fun stopHotspotAndServer(context: Context) {
-        localServer.stop()
-        hotspotManager.stopHotspot()
+        try {
+            localServer.stop()
+            hotspotManager.stopHotspot()
+        } catch (e: Exception) {
+            // Ignore
+        }
         _hotspotState.value = _hotspotState.value.copy(isActive = false)
     }
 
     override fun onCleared() {
         super.onCleared()
-        localServer.stop()
-        hotspotManager.stopHotspot()
+        try {
+            localServer.stop()
+            hotspotManager.stopHotspot()
+        } catch (e: Exception) {
+            // Ignore
+        }
     }
 
     @SuppressLint("MissingPermission")
