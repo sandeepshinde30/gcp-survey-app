@@ -134,10 +134,21 @@ fun GcpSurveyApp(viewModel: SurveyViewModel) {
                             Spacer(Modifier.width(4.dp))
                             Text("Laptop Connect", fontSize = 12.sp, fontWeight = FontWeight.Bold)
                         }
+                        
+                        // --- यहाँ Share बटन अपडेट कर दिया गया है ---
                         IconButton(onClick = {
-                            val csvFile = viewModel.exportCsv(context)
-                            if (csvFile != null) {
-                                Toast.makeText(context, "CSV saved to Documents: ${csvFile.name}", Toast.LENGTH_LONG).show()
+                            viewModel.exportCsv(context) { csvFile ->
+                                if (csvFile != null) {
+                                    val uri = FileProvider.getUriForFile(context, "${context.packageName}.provider", csvFile)
+                                    val intent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                                        type = "text/csv"
+                                        putExtra(android.content.Intent.EXTRA_STREAM, uri)
+                                        addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                    }
+                                    context.startActivity(android.content.Intent.createChooser(intent, "Share CSV"))
+                                } else {
+                                    Toast.makeText(context, "Export Failed! No Data.", Toast.LENGTH_SHORT).show()
+                                }
                             }
                         }) {
                             Icon(Icons.Default.Share, contentDescription = "Quick CSV Export")
