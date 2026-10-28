@@ -44,7 +44,7 @@ fun LaptopSyncScreen(
                 title = {
                     Column {
                         Text("Laptop Connect & Transfer Hub", fontWeight = FontWeight.Bold, fontSize = 18.sp)
-                        Text("Wireless Data Transfer to Laptop (Zero Cables Needed)", fontSize = 11.sp)
+                        Text("Wireless Data Transfer to Laptop", fontSize = 11.sp)
                     }
                 },
                 navigationIcon = {
@@ -64,7 +64,7 @@ fun LaptopSyncScreen(
                 Tab(
                     selected = selectedMode == 0,
                     onClick = { selectedMode = 0 },
-                    text = { Text("Mode A: Wi-Fi Hotspot", fontSize = 11.sp, fontWeight = FontWeight.SemiBold) },
+                    text = { Text("Mode A: Wi-Fi", fontSize = 11.sp, fontWeight = FontWeight.SemiBold) },
                     icon = { Icon(Icons.Default.Wifi, contentDescription = null, modifier = Modifier.size(18.dp)) }
                 )
                 Tab(
@@ -126,7 +126,7 @@ fun ModeAHotspotWebServer(
                     )
                     Spacer(Modifier.width(8.dp))
                     Text(
-                        if (hotspotState.isActive) "LOCAL SERVER & HOTSPOT ACTIVE" else "HOTSPOT & SERVER STOPPED",
+                        if (hotspotState.isActive) "SERVER ACTIVE" else "SERVER STOPPED",
                         color = Color.White,
                         fontWeight = FontWeight.Bold,
                         fontSize = 12.sp,
@@ -138,7 +138,7 @@ fun ModeAHotspotWebServer(
                     onClick = {
                         if (hotspotState.isActive) {
                             viewModel.stopHotspotAndServer(context)
-                            Toast.makeText(context, "Server & Hotspot stopped. Wi-Fi radio powered down.", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, "Server Stopped", Toast.LENGTH_SHORT).show()
                         } else {
                             viewModel.startHotspotAndServer(context)
                         }
@@ -148,7 +148,7 @@ fun ModeAHotspotWebServer(
                     ),
                     contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
                 ) {
-                    Text(if (hotspotState.isActive) "Stop (Save Battery)" else "Start Hotspot Server", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                    Text(if (hotspotState.isActive) "Stop Server" else "Start Hotspot Server", fontSize = 11.sp, fontWeight = FontWeight.Bold)
                 }
             }
 
@@ -159,11 +159,7 @@ fun ModeAHotspotWebServer(
                 ) {
                     Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text("1. CONNECT LAPTOP TO THIS WI-FI:", fontSize = 10.sp, color = Color(0xFF94A3B8), fontFamily = FontFamily.Monospace)
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                             Column {
                                 Text("Wi-Fi SSID:", fontSize = 11.sp, color = Color(0xFFCBD5E1))
                                 Text(hotspotState.ssid, fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color(0xFFFBBF24), fontFamily = FontFamily.Monospace)
@@ -172,12 +168,7 @@ fun ModeAHotspotWebServer(
                                 Icon(Icons.Default.ContentCopy, contentDescription = "Copy SSID", tint = Color.White, modifier = Modifier.size(16.dp))
                             }
                         }
-
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                             Column {
                                 Text("WPA2 Password:", fontSize = 11.sp, color = Color(0xFFCBD5E1))
                                 Text(hotspotState.password, fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color(0xFFFBBF24), fontFamily = FontFamily.Monospace)
@@ -195,33 +186,19 @@ fun ModeAHotspotWebServer(
                     modifier = Modifier.border(1.dp, Color(0xFF38BDF8), RoundedCornerShape(10.dp))
                 ) {
                     Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Text("2. OPEN THIS ACTUAL DYNAMIC IP IN LAPTOP BROWSER:", fontSize = 10.sp, color = Color(0xFF7DD3FC), fontFamily = FontFamily.Monospace)
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                hotspotState.fullUrl,
-                                fontSize = 18.sp,
-                                fontWeight = FontWeight.ExtraBold,
-                                color = Color.White,
-                                fontFamily = FontFamily.Monospace
-                            )
+                        Text("2. OPEN THIS IP IN LAPTOP BROWSER:", fontSize = 10.sp, color = Color(0xFF7DD3FC), fontFamily = FontFamily.Monospace)
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                            Text(hotspotState.fullUrl, fontSize = 18.sp, fontWeight = FontWeight.ExtraBold, color = Color.White, fontFamily = FontFamily.Monospace)
                             IconButton(onClick = { copyToClipboard(context, "URL", hotspotState.fullUrl) }) {
                                 Icon(Icons.Default.ContentCopy, contentDescription = "Copy URL", tint = Color(0xFF38BDF8))
                             }
                         }
-                        Text(
-                            "Dynamic IP detected from active network interface on Port 8080. Zero internet or SIM required.",
-                            fontSize = 10.sp,
-                            color = Color(0xFFBAE6FD)
-                        )
                     }
                 }
 
-                Text("Laptop Browser Portal Buttons Available at this URL:", fontSize = 11.sp, color = Color(0xFF94A3B8), fontWeight = FontWeight.SemiBold)
+                Text("Direct Download & Share Options (Mobile):", fontSize = 11.sp, color = Color(0xFF94A3B8), fontWeight = FontWeight.SemiBold)
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    
                     // 1. All Photos ZIP Button
                     FilledTonalButton(
                         onClick = { 
@@ -233,16 +210,16 @@ fun ModeAHotspotWebServer(
                                         putExtra(android.content.Intent.EXTRA_STREAM, uri)
                                         addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
                                     }
-                                    context.startActivity(android.content.Intent.createChooser(intent, "Share All Photos (.zip)"))
+                                    context.startActivity(android.content.Intent.createChooser(intent, "Share Photos Zip"))
                                 } else {
-                                    Toast.makeText(context, "No Photos Found to Zip", Toast.LENGTH_SHORT).show()
+                                    Toast.makeText(context, "No Photos Found", Toast.LENGTH_SHORT).show()
                                 }
                             } 
                         },
                         modifier = Modifier.weight(1f),
                         contentPadding = PaddingValues(4.dp)
                     ) {
-                        Text("All Photos (.zip)", fontSize = 10.sp, maxLines = 1)
+                        Text("Photos (.zip)", fontSize = 10.sp, maxLines = 1)
                     }
 
                     // 2. Master Excel Button
@@ -256,14 +233,14 @@ fun ModeAHotspotWebServer(
                                         putExtra(android.content.Intent.EXTRA_STREAM, uri)
                                         addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
                                     }
-                                    context.startActivity(android.content.Intent.createChooser(intent, "Open/Share Excel"))
+                                    context.startActivity(android.content.Intent.createChooser(intent, "Share Excel"))
                                 }
                             } 
                         },
                         modifier = Modifier.weight(1f),
                         contentPadding = PaddingValues(4.dp)
                     ) {
-                        Text("Master Excel (.xls)", fontSize = 10.sp, maxLines = 1)
+                        Text("Excel (.xls)", fontSize = 10.sp, maxLines = 1)
                     }
 
                     // 3. Database CSV Button
@@ -277,19 +254,19 @@ fun ModeAHotspotWebServer(
                                         putExtra(android.content.Intent.EXTRA_STREAM, uri)
                                         addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
                                     }
-                                    context.startActivity(android.content.Intent.createChooser(intent, "Open/Share CSV"))
+                                    context.startActivity(android.content.Intent.createChooser(intent, "Share CSV"))
                                 }
                             } 
                         },
                         modifier = Modifier.weight(1f),
                         contentPadding = PaddingValues(4.dp)
                     ) {
-                        Text("Database (.csv)", fontSize = 10.sp, maxLines = 1)
+                        Text("CSV (.csv)", fontSize = 10.sp, maxLines = 1)
                     }
                 }
             } else {
                 Text(
-                    "Hotspot & Embedded Web Server are stopped to preserve 100% battery while surveying in the field. Tap 'Start Hotspot Server' when you are ready to transfer files to laptop.",
+                    "Hotspot & Server stopped. Tap 'Start Hotspot Server' to enable file transfer.",
                     color = Color(0xFF94A3B8),
                     fontSize = 12.sp
                 )
@@ -305,13 +282,8 @@ fun ModeBBluetoothTransfer(context: Context, viewModel: SurveyViewModel) {
         shape = RoundedCornerShape(16.dp)
     ) {
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text("Mode B: Direct Bluetooth OBEX File Push", fontWeight = FontWeight.Bold, fontSize = 14.sp)
-            Text(
-                "Send files directly to a paired laptop using Android's native Bluetooth OBEX protocol without Wi-Fi.",
-                fontSize = 12.sp,
-                color = Color.DarkGray
-            )
-
+            Text("Mode B: Bluetooth Transfer", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+            
             Button(
                 onClick = {
                     viewModel.exportExcelXls(context) { file ->
@@ -323,7 +295,7 @@ fun ModeBBluetoothTransfer(context: Context, viewModel: SurveyViewModel) {
             ) {
                 Icon(Icons.Default.FileDownload, contentDescription = null, modifier = Modifier.size(16.dp))
                 Spacer(Modifier.width(6.dp))
-                Text("Send Master Excel (.xls) via Bluetooth")
+                Text("Send Excel via Bluetooth")
             }
 
             Button(
@@ -337,7 +309,7 @@ fun ModeBBluetoothTransfer(context: Context, viewModel: SurveyViewModel) {
             ) {
                 Icon(Icons.Default.FileDownload, contentDescription = null, modifier = Modifier.size(16.dp))
                 Spacer(Modifier.width(6.dp))
-                Text("Send Survey Database (.csv) via Bluetooth")
+                Text("Send CSV via Bluetooth")
             }
 
             Button(
@@ -351,7 +323,7 @@ fun ModeBBluetoothTransfer(context: Context, viewModel: SurveyViewModel) {
             ) {
                 Icon(Icons.Default.FolderZip, contentDescription = null, modifier = Modifier.size(16.dp))
                 Spacer(Modifier.width(6.dp))
-                Text("Send All Photos (.zip) via Bluetooth")
+                Text("Send Photos (.zip) via Bluetooth")
             }
         }
     }
@@ -364,16 +336,11 @@ fun ModeCUsbMassStorage() {
         shape = RoundedCornerShape(16.dp)
     ) {
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Text("Mode C: USB Mass Storage / MTP Cable", fontWeight = FontWeight.Bold, fontSize = 14.sp)
-            Text(
-                "Connect phone to laptop using USB-C cable and select 'File Transfer / MTP' on the phone notification.",
-                fontSize = 12.sp,
-                color = Color.DarkGray
-            )
-
+            Text("Mode C: USB Cable", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+            Text("Connect phone to laptop using USB-C and select 'File Transfer / MTP'.", fontSize = 12.sp, color = Color.DarkGray)
             Card(colors = CardDefaults.cardColors(containerColor = Color(0xFF1E293B))) {
                 Text(
-                    "Laptop Explorer Path:\nThis PC > [Phone Name] > Internal Storage > Documents > GCP_Survey/",
+                    "Laptop Path:\nThis PC > Phone > Documents > GCP_Survey/",
                     fontFamily = FontFamily.Monospace,
                     fontSize = 11.sp,
                     color = Color(0xFF38BDF8),
@@ -388,5 +355,5 @@ fun copyToClipboard(context: Context, label: String, text: String) {
     val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
     val clip = ClipData.newPlainText(label, text)
     clipboard.setPrimaryClip(clip)
-    Toast.makeText(context, "$label copied to clipboard", Toast.LENGTH_SHORT).show()
+    Toast.makeText(context, "$label copied", Toast.LENGTH_SHORT).show()
 }
