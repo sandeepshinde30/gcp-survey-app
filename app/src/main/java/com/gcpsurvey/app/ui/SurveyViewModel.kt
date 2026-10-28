@@ -4,6 +4,7 @@ import android.annotation.SuppressLint
 import android.app.Application
 import android.content.Context
 import android.location.Location
+import android.widget.Toast
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.gcpsurvey.app.data.GcpDatabase
@@ -23,7 +24,6 @@ import java.io.File
 import java.text.SimpleDateFormat
 import java.util.*
 
-
 data class SessionState(
     val hotelLat: Double? = null,
     val hotelLon: Double? = null,
@@ -38,9 +38,6 @@ data class SessionState(
     val accumulatedDistance: Double = 0.0,
     val previousPointLabel: String = "Hotel"
 )
-
-// यह क्लास गायब थी, इसे जोड़ दिया गया है
-
 
 class SurveyViewModel(application: Application) : AndroidViewModel(application) {
     private val dao = GcpDatabase.getDatabase(application).gcpDao()
@@ -94,6 +91,7 @@ class SurveyViewModel(application: Application) : AndroidViewModel(application) 
 
     @SuppressLint("MissingPermission")
     fun captureHotelLocation(context: Context) {
+        Toast.makeText(context, "Locating Hotel GPS... कृपया 5-10 सेकंड रुकें", Toast.LENGTH_SHORT).show()
         val cancellationTokenSource = com.google.android.gms.tasks.CancellationTokenSource()
         fusedLocationClient.getCurrentLocation(
             Priority.PRIORITY_BALANCED_POWER_ACCURACY,
@@ -101,22 +99,27 @@ class SurveyViewModel(application: Application) : AndroidViewModel(application) 
         )
             .addOnSuccessListener { location: Location? ->
                 cancellationTokenSource.cancel()
-                location?.let { loc ->
+                if (location != null) {
                     val state = _sessionState.value
                     _sessionState.value = state.copy(
-                        hotelLat = loc.latitude,
-                        hotelLon = loc.longitude,
+                        hotelLat = location.latitude,
+                        hotelLon = location.longitude,
                         previousPointLabel = "Hotel"
                     )
+                    Toast.makeText(context, "Hotel Location Captured Successfully!", Toast.LENGTH_SHORT).show()
+                } else {
+                    Toast.makeText(context, "GPS Signal नहीं मिला। खुली जगह पर जाएं।", Toast.LENGTH_LONG).show()
                 }
             }
             .addOnFailureListener {
                 cancellationTokenSource.cancel()
+                Toast.makeText(context, "GPS Error: ${it.message}", Toast.LENGTH_LONG).show()
             }
     }
 
     @SuppressLint("MissingPermission")
     fun captureGcpLocation(context: Context) {
+        Toast.makeText(context, "Locating GCP GPS... कृपया 5-10 सेकंड रुकें", Toast.LENGTH_SHORT).show()
         val cancellationTokenSource = com.google.android.gms.tasks.CancellationTokenSource()
         fusedLocationClient.getCurrentLocation(
             Priority.PRIORITY_BALANCED_POWER_ACCURACY,
@@ -124,7 +127,7 @@ class SurveyViewModel(application: Application) : AndroidViewModel(application) 
         )
             .addOnSuccessListener { location: Location? ->
                 cancellationTokenSource.cancel()
-                location?.let { loc ->
+                if (location != null) {
                     val state = _sessionState.value
                     var segment = 0.0
                     var prevLabel = state.previousPointLabel
@@ -133,7 +136,7 @@ class SurveyViewModel(application: Application) : AndroidViewModel(application) 
                         val results = FloatArray(1)
                         Location.distanceBetween(
                             state.lastRecordedGcpLat, state.lastRecordedGcpLon,
-                            loc.latitude, loc.longitude,
+                            location.latitude, location.longitude,
                             results
                         )
                         segment = results[0].toDouble()
@@ -142,7 +145,7 @@ class SurveyViewModel(application: Application) : AndroidViewModel(application) 
                         val results = FloatArray(1)
                         Location.distanceBetween(
                             state.hotelLat, state.hotelLon,
-                            loc.latitude, loc.longitude,
+                            location.latitude, location.longitude,
                             results
                         )
                         segment = results[0].toDouble()
@@ -150,17 +153,21 @@ class SurveyViewModel(application: Application) : AndroidViewModel(application) 
                     }
 
                     _sessionState.value = state.copy(
-                        currentGcpLat = loc.latitude,
-                        currentGcpLon = loc.longitude,
-                        currentGcpAlt = if (loc.hasAltitude()) loc.altitude else null,
-                        currentGcpAcc = if (loc.hasAccuracy()) loc.accuracy else null,
+                        currentGcpLat = location.latitude,
+                        currentGcpLon = location.longitude,
+                        currentGcpAlt = if (location.hasAltitude()) location.altitude else null,
+                        currentGcpAcc = if (location.hasAccuracy()) location.accuracy else null,
                         currentSegmentDistance = segment,
                         previousPointLabel = prevLabel
                     )
+                    Toast.makeText(context, "GCP Location Captured Successfully!", Toast.LENGTH_SHORT).show()
+                } else {
+                    Toast.makeText(context, "GPS Signal नहीं मिला। खुली जगह पर जाएं।", Toast.LENGTH_LONG).show()
                 }
             }
             .addOnFailureListener {
                 cancellationTokenSource.cancel()
+                Toast.makeText(context, "GPS Error: ${it.message}", Toast.LENGTH_LONG).show()
             }
     }
 
@@ -248,7 +255,7 @@ class SurveyViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
-       fun exportCsv(context: Context, onFileReady: (File?) -> Unit) {
+    fun exportCsv(context: Context, onFileReady: (File?) -> Unit) {
         viewModelScope.launch {
             val records = dao.getAllRecordsSync()
             val file = CsvExporter.exportToCsv(context, records)
@@ -270,3 +277,4 @@ class SurveyViewModel(application: Application) : AndroidViewModel(application) 
             onFileReady(file)
         }
     }
+}
