@@ -1,9 +1,14 @@
 package com.gcpsurvey.app.ui
 
+import android.Manifest
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.content.pm.PackageManager
+import android.os.Build
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
@@ -23,6 +28,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import com.gcpsurvey.app.network.BluetoothTransferHelper
 import com.gcpsurvey.app.network.HotspotInfoState
@@ -37,6 +43,17 @@ fun LaptopSyncScreen(
     var selectedMode by remember { mutableStateOf(0) }
     val hotspotState by viewModel.hotspotState.collectAsState()
     val scrollState = rememberScrollState()
+
+    // हॉटस्पॉट के लिए परमिशन लॉन्चर
+    val hotspotPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        if (isGranted) {
+            viewModel.startHotspotAndServer(context)
+        } else {
+            Toast.makeText(context, "Nearby Devices परमिशन के बिना हॉटस्पॉट नहीं चलेगा", Toast.LENGTH_LONG).show()
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -89,7 +106,22 @@ fun LaptopSyncScreen(
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 when (selectedMode) {
-                    0 -> ModeAHotspotWebServer(context, viewModel, hotspotState)
+                    0 -> ModeAHotspotWebServer(
+                        context = context, 
+                        viewModel = viewModel, 
+                        hotspotState = hotspotState,
+                        onStartHotspotClick = {
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                                if (ContextCompat.checkSelfPermission(context, Manifest.permission.NEARBY_WIFI_DEVICES) == PackageManager.PERMISSION_GRANTED) {
+                                    viewModel.startHotspotAndServer(context)
+                                } else {
+                                    hotspotPermissionLauncher.launch(Manifest.permission.NEARBY_WIFI_DEVICES)
+                                }
+                            } else {
+                                viewModel.startHotspotAndServer(context)
+                            }
+                        }
+                    )
                     1 -> ModeBBluetoothTransfer(context, viewModel)
                     2 -> ModeCUsbMassStorage()
                 }
@@ -102,7 +134,8 @@ fun LaptopSyncScreen(
 fun ModeAHotspotWebServer(
     context: Context,
     viewModel: SurveyViewModel,
-    hotspotState: HotspotInfoState
+    hotspotState: HotspotInfoState,
+    onStartHotspotClick: () -> Unit
 ) {
     Card(
         colors = CardDefaults.cardColors(containerColor = Color(0xFF0F172A)),
@@ -140,7 +173,7 @@ fun ModeAHotspotWebServer(
                             viewModel.stopHotspotAndServer(context)
                             Toast.makeText(context, "Server Stopped", Toast.LENGTH_SHORT).show()
                         } else {
-                            viewModel.startHotspotAndServer(context)
+                            onStartHotspotClick()
                         }
                     },
                     colors = ButtonDefaults.buttonColors(
@@ -199,7 +232,6 @@ fun ModeAHotspotWebServer(
                 Text("Direct Download & Share Options (Mobile):", fontSize = 11.sp, color = Color(0xFF94A3B8), fontWeight = FontWeight.SemiBold)
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     
-                    // 1. All Photos ZIP Button
                     FilledTonalButton(
                         onClick = { 
                             viewModel.exportPhotosZip(context) { file -> 
@@ -222,7 +254,6 @@ fun ModeAHotspotWebServer(
                         Text("Photos (.zip)", fontSize = 10.sp, maxLines = 1)
                     }
 
-                    // 2. Master Excel Button
                     FilledTonalButton(
                         onClick = { 
                             viewModel.exportExcelXls(context) { file -> 
@@ -243,7 +274,6 @@ fun ModeAHotspotWebServer(
                         Text("Excel (.xls)", fontSize = 10.sp, maxLines = 1)
                     }
 
-                    // 3. Database CSV Button
                     FilledTonalButton(
                         onClick = { 
                             viewModel.exportCsv(context) { file -> 
