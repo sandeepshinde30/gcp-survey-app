@@ -32,6 +32,7 @@ import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import com.gcpsurvey.app.network.BluetoothTransferHelper
 import com.gcpsurvey.app.network.HotspotInfoState
+import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -42,6 +43,8 @@ fun LaptopSyncScreen(
     val context = LocalContext.current
     var selectedMode by remember { mutableStateOf(0) }
     val hotspotState by viewModel.hotspotState.collectAsState()
+    val sessionState by viewModel.sessionState.collectAsState()
+    val records by viewModel.allRecords.collectAsState(initial = emptyList()) // डेटा (Total Points) के लिए
     val scrollState = rememberScrollState()
 
     // हॉटस्पॉट के लिए परमिशन लॉन्चर
@@ -110,6 +113,8 @@ fun LaptopSyncScreen(
                         context = context, 
                         viewModel = viewModel, 
                         hotspotState = hotspotState,
+                        sessionState = sessionState,
+                        totalRecords = records.size,
                         onStartHotspotClick = {
                             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                                 if (ContextCompat.checkSelfPermission(context, Manifest.permission.NEARBY_WIFI_DEVICES) == PackageManager.PERMISSION_GRANTED) {
@@ -135,6 +140,8 @@ fun ModeAHotspotWebServer(
     context: Context,
     viewModel: SurveyViewModel,
     hotspotState: HotspotInfoState,
+    sessionState: SessionState,
+    totalRecords: Int,
     onStartHotspotClick: () -> Unit
 ) {
     Card(
@@ -143,6 +150,29 @@ fun ModeAHotspotWebServer(
         modifier = Modifier.fillMaxWidth()
     ) {
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            
+            // --- यहाँ लाइव दूरी (Live Distance) और डेटा दिख रहा है ---
+            Card(
+                colors = CardDefaults.cardColors(containerColor = Color(0xFF1E293B)),
+                shape = RoundedCornerShape(10.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(12.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column {
+                        Text("Total Saved Points", fontSize = 10.sp, color = Color(0xFF94A3B8))
+                        Text("$totalRecords", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color(0xFFFBBF24))
+                    }
+                    Column(horizontalAlignment = Alignment.End) {
+                        Text("Live Distance (Today)", fontSize = 10.sp, color = Color(0xFF94A3B8))
+                        val totalKm = (sessionState.accumulatedDistance + sessionState.currentSegmentDistance) / 1000.0
+                        Text("${String.format(Locale.US, "%.3f", totalKm)} km", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color(0xFF10B981))
+                    }
+                }
+            }
+
+            // --- सर्वर स्टेटस और स्टार्ट/स्टॉप बटन ---
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -229,13 +259,27 @@ fun ModeAHotspotWebServer(
                     }
                 }
 
-                Text("Direct Download & Share Options (Mobile):", fontSize = 11.sp, color = Color(0xFF94A3B8), fontWeight = FontWeight.SemiBold)
+                // --- फोल्डर पाथ (Folder Path) यहाँ दिख रहा है ---
+                Divider(color = Color.LightGray, thickness = 1.dp)
+                Text("Current Save Path (Phone):", fontSize = 10.sp, color = Color(0xFF94A3B8), fontWeight = FontWeight.Bold)
+                Text(
+                    "Documents/GCP_Survey/",
+                    fontSize = 11.sp,
+                    fontFamily = FontFamily.Monospace,
+                    color = Color(0xFF38BDF8)
+                )
+
+                // --- एक्सपोर्ट बटन और मैसेज (Toast) ---
+                Text("Export & Share Options:", fontSize = 11.sp, color = Color(0xFF94A3B8), fontWeight = FontWeight.SemiBold)
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     
+                    // Photos ZIP Button
                     FilledTonalButton(
                         onClick = { 
                             viewModel.exportPhotosZip(context) { file -> 
                                 if (file != null) {
+                                    // Share करते समय मैसेज (Toast)
+                                    Toast.makeText(context, "Photos ZIP Saved:\n${file.name}", Toast.LENGTH_LONG).show()
                                     val uri = FileProvider.getUriForFile(context, "${context.packageName}.provider", file)
                                     val intent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
                                         type = "application/zip"
@@ -254,10 +298,12 @@ fun ModeAHotspotWebServer(
                         Text("Photos (.zip)", fontSize = 10.sp, maxLines = 1)
                     }
 
+                    // Excel Button
                     FilledTonalButton(
                         onClick = { 
                             viewModel.exportExcelXls(context) { file -> 
                                 if (file != null) {
+                                    Toast.makeText(context, "Excel Saved:\n${file.name}", Toast.LENGTH_LONG).show()
                                     val uri = FileProvider.getUriForFile(context, "${context.packageName}.provider", file)
                                     val intent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
                                         type = "application/vnd.ms-excel"
@@ -274,10 +320,12 @@ fun ModeAHotspotWebServer(
                         Text("Excel (.xls)", fontSize = 10.sp, maxLines = 1)
                     }
 
+                    // CSV Button
                     FilledTonalButton(
                         onClick = { 
                             viewModel.exportCsv(context) { file -> 
                                 if (file != null) {
+                                    Toast.makeText(context, "CSV Saved:\n${file.name}", Toast.LENGTH_LONG).show()
                                     val uri = FileProvider.getUriForFile(context, "${context.packageName}.provider", file)
                                     val intent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
                                         type = "text/csv"
