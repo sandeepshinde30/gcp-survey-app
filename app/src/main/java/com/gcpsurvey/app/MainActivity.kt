@@ -130,9 +130,11 @@ fun GcpSurveyApp(viewModel: SurveyViewModel) {
                             Text("Laptop Connect", fontSize = 12.sp, fontWeight = FontWeight.Bold)
                         }
                         
+                        // 1. CSV Share Button
                         IconButton(onClick = {
                             viewModel.exportCsv(context) { csvFile ->
                                 if (csvFile != null) {
+                                    Toast.makeText(context, "CSV Saved:\n${csvFile.absolutePath}", Toast.LENGTH_LONG).show()
                                     val uri = FileProvider.getUriForFile(context, "${context.packageName}.provider", csvFile)
                                     val intent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
                                         type = "text/csv"
@@ -145,7 +147,45 @@ fun GcpSurveyApp(viewModel: SurveyViewModel) {
                                 }
                             }
                         }) {
-                            Icon(Icons.Default.Share, contentDescription = "Quick CSV Export")
+                            Icon(Icons.Default.Share, contentDescription = "Quick CSV Export", modifier = Modifier.size(20.dp))
+                        }
+
+                        // 2. Excel Share Button
+                        IconButton(onClick = {
+                            viewModel.exportExcelXls(context) { excelFile ->
+                                if (excelFile != null) {
+                                    Toast.makeText(context, "Excel Saved:\n${excelFile.absolutePath}", Toast.LENGTH_LONG).show()
+                                    val uri = FileProvider.getUriForFile(context, "${context.packageName}.provider", excelFile)
+                                    val intent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                                        type = "application/vnd.ms-excel"
+                                        putExtra(android.content.Intent.EXTRA_STREAM, uri)
+                                        addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                    }
+                                    context.startActivity(android.content.Intent.createChooser(intent, "Share Excel"))
+                                }
+                            }
+                        }) {
+                            Icon(Icons.Default.GridOn, contentDescription = "Share Excel", modifier = Modifier.size(20.dp))
+                        }
+
+                        // 3. Photos ZIP Share Button
+                        IconButton(onClick = {
+                            viewModel.exportPhotosZip(context) { zipFile ->
+                                if (zipFile != null) {
+                                    Toast.makeText(context, "Photos Zip Saved:\n${zipFile.absolutePath}", Toast.LENGTH_LONG).show()
+                                    val uri = FileProvider.getUriForFile(context, "${context.packageName}.provider", zipFile)
+                                    val intent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                                        type = "application/zip"
+                                        putExtra(android.content.Intent.EXTRA_STREAM, uri)
+                                        addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                    }
+                                    context.startActivity(android.content.Intent.createChooser(intent, "Share Photos Zip"))
+                                } else {
+                                    Toast.makeText(context, "No Photos Found", Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                        }) {
+                            Icon(Icons.Default.FolderZip, contentDescription = "Share Photos", modifier = Modifier.size(20.dp))
                         }
                     }
                 )
@@ -217,13 +257,11 @@ fun SurveyFormScreen(
     var roleExpanded by remember { mutableStateOf(false) }
     var markExpanded by remember { mutableStateOf(false) }
 
-    // Observation Timer
     var isObserving by remember { mutableStateOf(false) }
     var obsSeconds by remember { mutableStateOf(0) }
     var startTimeString by remember { mutableStateOf("") }
     var endTimeString by remember { mutableStateOf("") }
     
-    // --- कैमरा खोलने का नया कोड ---
     var currentPhotoUri by remember { mutableStateOf<Uri?>(null) }
     var currentPhotoSlot by remember { mutableStateOf("") }
 
@@ -274,7 +312,6 @@ fun SurveyFormScreen(
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
-        // Distance Tracking Banner
         Card(
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
             shape = RoundedCornerShape(12.dp)
@@ -292,16 +329,17 @@ fun SurveyFormScreen(
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Column {
-                        Text("Current Segment", fontSize = 11.sp, color = Color.Gray)
+                        Text("Current Segment (From -> To)", fontSize = 11.sp, color = Color.Gray)
                         Text(
                             "${String.format(Locale.US, "%.2f", session.currentSegmentDistance)} m",
                             fontSize = 18.sp,
                             fontWeight = FontWeight.Bold
                         )
                         Text(
-                            "From: ${session.previousPointLabel}",
+                            "From: ${session.previousPointLabel} -> To: $gcpId",
                             fontSize = 10.sp,
-                            color = MaterialTheme.colorScheme.secondary
+                            color = MaterialTheme.colorScheme.secondary,
+                            fontWeight = FontWeight.Bold
                         )
                     }
                     Column(horizontalAlignment = Alignment.End) {
@@ -323,7 +361,6 @@ fun SurveyFormScreen(
             }
         }
 
-        // GPS Capture Section
         Card(
             colors = CardDefaults.cardColors(containerColor = Color(0xFFF8FAFC)),
             shape = RoundedCornerShape(12.dp)
@@ -385,10 +422,23 @@ fun SurveyFormScreen(
                         color = Color(0xFF0369A1)
                     )
                 }
+                
+                Divider(color = Color.LightGray, thickness = 1.dp)
+                Text(
+                    "Current Save Path:",
+                    fontSize = 11.sp,
+                    color = Color.Gray,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    "GCP_Survey/$hierarchyFolder",
+                    fontSize = 10.sp,
+                    fontFamily = FontFamily.Monospace,
+                    color = Color(0xFF047857)
+                )
             }
         }
 
-        // Survey Metadata Form Fields
         Text("Survey Metadata & Observation Timing", fontWeight = FontWeight.SemiBold)
 
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -507,7 +557,6 @@ fun SurveyFormScreen(
             }
         }
 
-        // Camera Buttons Section
         Text("Camera Geotagging & Storage Optimization", fontWeight = FontWeight.SemiBold)
 
         val photoSlots = listOf(
@@ -527,7 +576,8 @@ fun SurveyFormScreen(
                                 val photoDir = File(context.getExternalFilesDir(android.os.Environment.DIRECTORY_DOCUMENTS), "GCP_Survey/$hierarchyFolder")
                                 if (!photoDir.exists()) photoDir.mkdirs()
                                 
-                                val photoFile = File(photoDir, "${slot.replace(" ", "_")}_${System.currentTimeMillis()}.jpg")
+                                // रैंडम नंबर हटाकर साफ नाम
+                                val photoFile = File(photoDir, "${gcpId}_${slot.replace(" ", "_")}.jpg")
                                 currentPhotoUri = FileProvider.getUriForFile(context, "${context.packageName}.provider", photoFile)
                                 
                                 cameraLauncher.launch(currentPhotoUri)
@@ -546,7 +596,6 @@ fun SurveyFormScreen(
             }
         }
 
-        // Save Record Button
         Button(
             onClick = {
                 if (session.currentGcpLat == null) {
@@ -647,6 +696,13 @@ fun RecordsListScreen(
                                 fontFamily = FontFamily.Monospace,
                                 fontSize = 12.sp
                             )
+                            
+                            Text(
+                                "From: ${if (record.previousPointType == "hotel") "Hotel" else record.previousPointId} -> To: ${record.gcpId}",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.secondary
+                            )
                             Text(
                                 "Segment: ${String.format(Locale.US, "%.2f", record.segmentDistanceMeters)}m | Total: ${String.format(Locale.US, "%.2f", record.accumulatedDistanceMeters)}m",
                                 fontSize = 12.sp,
@@ -657,6 +713,12 @@ fun RecordsListScreen(
                                 "Project: ${record.projectName} • ${record.city} • Ant: ${record.antennaHeight}m",
                                 fontSize = 11.sp,
                                 color = Color.DarkGray
+                            )
+                            Text(
+                                "Path: ${record.folderPath}",
+                                fontSize = 10.sp,
+                                fontFamily = FontFamily.Monospace,
+                                color = Color.Gray
                             )
                         }
                     }
