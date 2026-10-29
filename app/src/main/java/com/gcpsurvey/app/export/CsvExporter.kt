@@ -39,18 +39,63 @@ object CsvExporter {
         val timeStamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
         val xlsFile = File(surveyFolder, "GCP_Master_Excel_$timeStamp.xls")
 
+        // --- Analysis (Productivity) ---
+        val totalPoints = records.size
+        val totalDistance = records.sumOf { it.segmentDistanceMeters }
+        val totalAccumulated = if (records.isNotEmpty()) records.maxOf { it.accumulatedDistanceMeters } else 0.0
+        val avgDistance = if (totalPoints > 0) totalDistance / totalPoints else 0.0
+        
+        var totalObsTimeSeconds = 0
+        records.forEach { r ->
+            val timeStr = r.totalObservationTime ?: "00m 00s"
+            val regex = "(\\d+)([hms])".toRegex()
+            regex.findAll(timeStr).forEach { match ->
+                val value = match.groupValues[1].toIntOrNull() ?: 0
+                when (match.groupValues[2]) {
+                    "h" -> totalObsTimeSeconds += value * 3600
+                    "m" -> totalObsTimeSeconds += value * 60
+                    "s" -> totalObsTimeSeconds += value
+                }
+            }
+        }
+        
+        val hours = totalObsTimeSeconds / 3600
+        val minutes = (totalObsTimeSeconds % 3600) / 60
+        val avgSpeed = if (totalObsTimeSeconds > 0) (totalDistance / 1000.0) / (totalObsTimeSeconds / 3600.0) else 0.0
+
         val sb = StringBuilder()
         sb.append("<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:x='urn:schemas-microsoft-com:office:excel' xmlns='http://www.w3.org/TR/REC-html40'>")
         sb.append("<head><meta charset='utf-8'><!--[if gte mso 9]><xml><x:ExcelWorkbook><x:ExcelWorksheets><x:ExcelWorksheet><x:Name>GCP Survey Master</x:Name>")
         sb.append("<x:WorksheetOptions><x:DisplayGridlines/></x:WorksheetOptions></x:ExcelWorksheet></x:ExcelWorksheets></x:ExcelWorkbook></xml><![endif]--></head>")
-        sb.append("<body><table border='1'>")
+        sb.append("<body>")
+        
+        // --- Title ---
+        sb.append("<h2>GCP Survey Productivity Report</h2>")
+        
+        // --- Analysis Summary Table ---
+        sb.append("<table border='1' style='border-collapse: collapse; margin-bottom: 20px;'>")
+        sb.append("<tr style='background-color:#059669; color:#ffffff; font-weight:bold;'><th colspan='2'>PRODUCTIVITY SUMMARY</th></tr>")
+        sb.append("<tr><td><b>Total Points Captured</b></td><td>$totalPoints</td></tr>")
+        sb.append("<tr><td><b>Total Travel Distance (km)</b></td><td>${String.format(Locale.US, "%.3f", totalAccumulated / 1000.0)} km</td></tr>")
+        sb.append("<tr><td><b>Average Distance per Point (m)</b></td><td>${String.format(Locale.US, "%.2f", avgDistance)} m</td></tr>")
+        sb.append("<tr><td><b>Total Observation Time</b></td><td>${hours}h ${minutes}m</td></tr>")
+        sb.append("<tr><td><b>Average Walking Speed (km/h)</b></td><td>${String.format(Locale.US, "%.2f", avgSpeed)} km/h</td></tr>")
+        sb.append("</table>")
+
+        // --- Raw Data Table ---
+        sb.append("<h3>Detailed Point-to-Point Data</h3>")
+        sb.append("<table border='1' style='border-collapse: collapse;'>")
         sb.append("<tr style='background-color:#0284c7; color:#ffffff; font-weight:bold;'>")
-        sb.append("<th>ID</th><th>Date</th><th>Project</th><th>City</th><th>Operator</th><th>GCP ID</th><th>Station Type</th><th>Survey Mode</th><th>Mark Type</th><th>Status</th><th>Start Time</th><th>End Time</th><th>Obs Duration</th><th>Antenna Ht (m)</th><th>Latitude</th><th>Longitude</th><th>Altitude</th><th>Accuracy</th><th>Segment Dist (m)</th><th>Accumulated Dist (m)</th><th>Folder Path</th>")
+        sb.append("<th>ID</th><th>Date</th><th>Project</th><th>Operator</th><th>GCP ID</th><th>Status</th><th>Start Time</th><th>End Time</th><th>Obs Duration</th><th>Latitude</th><th>Longitude</th><th>From (Previous)</th><th>To (Current)</th><th>Segment Dist (m)</th><th>Accumulated Dist (m)</th><th>Folder Path</th>")
         sb.append("</tr>")
 
         records.forEach { r ->
+            val prevName = if (r.previousPointType == "hotel") "Hotel" else r.previousPointId ?: "None"
             sb.append("<tr>")
-            sb.append("<td>${r.id}</td><td>${r.date}</td><td>${r.projectName}</td><td>${r.city}</td><td>${r.operatorName}</td><td>${r.gcpId}</td><td>${r.stationType}</td><td>${r.surveyMode}</td><td>${r.pointMarkType}</td><td>${r.pointStatus}</td><td>${r.startTime ?: ""}</td><td>${r.endTime ?: ""}</td><td>${r.totalObservationTime ?: ""}</td><td>${r.antennaHeight}</td><td>${r.latitude}</td><td>${r.longitude}</td><td>${r.altitude ?: ""}</td><td>${r.accuracy ?: ""}</td><td>${r.segmentDistanceMeters}</td><td>${r.accumulatedDistanceMeters}</td><td>${r.folderPath}</td>")
+            sb.append("<td>${r.id}</td><td>${r.date}</td><td>${r.projectName}</td><td>${r.operatorName}</td><td>${r.gcpId}</td><td>${r.pointStatus}</td><td>${r.startTime ?: ""}</td><td>${r.endTime ?: ""}</td><td>${r.totalObservationTime ?: ""}</td><td>${r.latitude}</td><td>${r.longitude}</td>")
+            sb.append("<td style='color:#D97706; font-weight:bold;'>$prevName</td>")
+            sb.append("<td style='color:#0369A1; font-weight:bold;'>${r.gcpId}</td>")
+            sb.append("<td>${String.format(Locale.US, "%.2f", r.segmentDistanceMeters)}</td><td>${String.format(Locale.US, "%.2f", r.accumulatedDistanceMeters)}</td><td>${r.folderPath}</td>")
             sb.append("</tr>")
         }
 
@@ -72,7 +117,7 @@ object CsvExporter {
 
         ZipOutputStream(FileOutputStream(zipFile)).use { zos ->
             surveyFolder.walkTopDown().filter { it.isFile && !it.name.endsWith(".zip") }.forEach { file ->
-                val relativePath = file.relativeTo(documentsDir).path
+                val relativePath = file.relativeTo(surveyFolder).path
                 zos.putNextEntry(ZipEntry(relativePath))
                 file.inputStream().use { it.copyTo(zos) }
                 zos.closeEntry()
