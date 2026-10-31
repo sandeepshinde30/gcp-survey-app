@@ -105,7 +105,7 @@ fun GcpSurveyApp(viewModel: SurveyViewModel) {
                 )
             )
         }
-        
+
         if (viewModel.isNetworkAvailable(context)) {
             viewModel.syncPendingDistances(context)
         }
@@ -153,7 +153,7 @@ fun GcpSurveyApp(viewModel: SurveyViewModel) {
                             Spacer(Modifier.width(4.dp))
                             Text("Laptop Connect", fontSize = 12.sp, fontWeight = FontWeight.Bold)
                         }
-                        
+
                         IconButton(onClick = {
                             viewModel.exportCsv(context) { csvFile ->
                                 if (csvFile != null) {
@@ -278,10 +278,10 @@ fun SurveyFormScreen(
     var obsSeconds by remember { mutableStateOf(0) }
     var startTimeString by remember { mutableStateOf("") }
     var endTimeString by remember { mutableStateOf("") }
-    
+
     var currentPhotoUri by remember { mutableStateOf<Uri?>(null) }
     var currentPhotoSlot by remember { mutableStateOf("") }
-    
+
     // फोटो के नाम सेव करने के लिए
     val capturedPhotos = remember { mutableStateListOf<String>() }
 
@@ -361,7 +361,7 @@ fun SurveyFormScreen(
                 ) {
                     Column {
                         Text("Road Distance (From -> To)", fontSize = 11.sp, color = Color.Gray)
-                        
+
                         if (session.isDistanceLoading) {
                             Text("Searching Road...", fontSize = 14.sp, color = Color.Gray)
                         } else if (session.currentSegmentDistance > 0.0) {
@@ -409,17 +409,16 @@ fun SurveyFormScreen(
 
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Button(
-                        onClick = { 
+                        onClick = {
                             if (!isValidGcpName(gcpId)) {
-                                invalidNameMessage = "GCP ID में सिर्फ अक्षर, संख्या, हाइफन (-) और अंडरस्कोर (_) होने चाहिए। स्पेस या कोई अजीब चिन्ह न डालें।\n\n" +
-                                        "GCP ID must contain only letters, numbers, hyphen (-), and underscore (_). Do not use spaces or special characters."
+                                invalidNameMessage = "GCP ID में सिर्फ अक्षर, संख्या, हाइफन (-) और अंडरस्कोर (_) होने चाहिए। स्पेस या कोई अजीब चिन्ह न डालें।\n\nGCP ID must contain only letters, numbers, hyphen (-), and underscore (_). Do not use spaces or special characters."
                                 showInvalidNameDialog = true
                                 return@Button
                             }
                             if (!isGpsEnabled(context)) {
                                 showGpsDialog = true
                             } else if (ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
-                                viewModel.captureHotelLocation(context) 
+                                viewModel.captureHotelLocation(context)
                             } else {
                                 onLocationPermissionRequested()
                                 Toast.makeText(context, "कृपया Location की परमिशन दें", Toast.LENGTH_LONG).show()
@@ -434,17 +433,16 @@ fun SurveyFormScreen(
                     }
 
                     Button(
-                        onClick = { 
+                        onClick = {
                             if (!isValidGcpName(gcpId)) {
-                                invalidNameMessage = "GCP ID में सिर्फ अक्षर, संख्या, हाइफन (-) और अंडरस्कोर (_) होने चाहिए। स्पेस या कोई अजीब चिन्ह न डालें।\n\n" +
-                                        "GCP ID must contain only letters, numbers, hyphen (-), and underscore (_). Do not use spaces or special characters."
+                                invalidNameMessage = "GCP ID में सिर्फ अक्षर, संख्या, हाइफन (-) और अंडरस्कोर (_) होने चाहिए। स्पेस या कोई अजीब चिन्ह न डालें।\n\nGCP ID must contain only letters, numbers, hyphen (-), and underscore (_). Do not use spaces or special characters."
                                 showInvalidNameDialog = true
                                 return@Button
                             }
                             if (!isGpsEnabled(context)) {
                                 showGpsDialog = true
                             } else if (ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
-                                viewModel.captureGcpLocation(context) 
+                                viewModel.captureGcpLocation(context)
                             } else {
                                 onLocationPermissionRequested()
                                 Toast.makeText(context, "कृपया Location की परमिशन दें", Toast.LENGTH_LONG).show()
@@ -477,7 +475,7 @@ fun SurveyFormScreen(
                         color = Color(0xFF0369A1)
                     )
                 }
-                
+
                 Divider(color = Color.LightGray, thickness = 1.dp)
                 Text(
                     "Current Save Path:",
@@ -628,15 +626,14 @@ fun SurveyFormScreen(
                         OutlinedButton(
                             onClick = {
                                 if (!isValidGcpName(gcpId)) {
-                                    invalidNameMessage = "फोटो खींचने से पहले सही GCP ID डालें (सिर्फ अक्षर, संख्या, -, _)।\n\n" +
-                                            "Please enter a valid GCP ID before taking a photo (letters, numbers, -, _ only)."
+                                    invalidNameMessage = "फोटो खींचने से पहले सही GCP ID डालें (सिर्फ अक्षर, संख्या, -, _)।\n\nPlease enter a valid GCP ID before taking photos (only letters, numbers, -, _)."
                                     showInvalidNameDialog = true
                                 } else if (!isGpsEnabled(context)) {
                                     showGpsDialog = true
                                 } else {
                                     currentPhotoSlot = slot
                                     val name = "${gcpId}_${slot.replace(" ", "_")}_${System.currentTimeMillis()}.jpg"
-                                    
+
                                     val values = ContentValues().apply {
                                         put(MediaStore.Images.Media.DISPLAY_NAME, name)
                                         put(MediaStore.Images.Media.MIME_TYPE, "image/jpeg")
@@ -644,7 +641,7 @@ fun SurveyFormScreen(
                                             put(MediaStore.Images.Media.RELATIVE_PATH, "Pictures/GCP_Survey/$hierarchyFolder")
                                         }
                                     }
-                                    
+
                                     currentPhotoUri = context.contentResolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values)
                                     cameraLauncher.launch(currentPhotoUri)
                                 }
@@ -666,8 +663,7 @@ fun SurveyFormScreen(
         Button(
             onClick = {
                 if (!isValidGcpName(gcpId)) {
-                    invalidNameMessage = "डेटा सेव करने के लिए सही GCP ID डालें (सिर्फ अक्षर, संख्या, -, _)।\n\n" +
-                            "Please enter a valid GCP ID to save the data (letters, numbers, -, _ only)."
+                    invalidNameMessage = "डेटा सेव करने के लिए सही GCP ID डालें (सिर्फ अक्षर, संख्या, -, _)।\n\nPlease enter a valid GCP ID to save data (only letters, numbers, -, _)."
                     showInvalidNameDialog = true
                     return@Button
                 }
@@ -710,16 +706,16 @@ fun SurveyFormScreen(
             Text("Save GCP Record to SQLite Database", fontWeight = FontWeight.Bold)
         }
 
-        // GPS Popup (Alert Dialog)
+        // GPS Popup (Alert Dialog) - हिंदी + अंग्रेजी
         if (showGpsDialog) {
             AlertDialog(
                 onDismissRequest = { showGpsDialog = false },
                 title = { Text("GPS बंद है! (GPS is OFF)", fontWeight = FontWeight.Bold, color = Color.Red) },
-                text = { 
+                text = {
                     Text(
                         "लोकेशन कैप्चर करने और फोटो में GPS डालने के लिए कृपया अपने फोन का GPS (Location) ऑन करें।\n\n" +
                         "Please turn ON your phone's GPS (Location) to capture location and geotag photos."
-                    ) 
+                    )
                 },
                 confirmButton = {
                     TextButton(
@@ -739,7 +735,7 @@ fun SurveyFormScreen(
             )
         }
 
-        // गलत GCP ID वाला Popup
+        // गलत GCP ID वाला Popup - हिंदी + अंग्रेजी
         if (showInvalidNameDialog) {
             AlertDialog(
                 onDismissRequest = { showInvalidNameDialog = false },
@@ -814,6 +810,36 @@ fun RecordsListScreen(
                                 fontFamily = FontFamily.Monospace,
                                 fontSize = 12.sp
                             )
-                            
+
                             Text(
-                                "From: ${if
+                                "From: ${if (record.previousPointType == "hotel") "Hotel" else record.previousPointId} -> To: ${record.gcpId}",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.secondary
+                            )
+                            Text(
+                                "Segment: ${String.format(Locale.US, "%.2f", record.segmentDistanceMeters)}m | Total: ${String.format(Locale.US, "%.2f", record.accumulatedDistanceMeters)}m",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                            Text(
+                                "Project: ${record.projectName} • ${record.city} • Ant: ${record.antennaHeight}m",
+                                fontSize = 11.sp,
+                                color = Color.DarkGray
+                            )
+                            Text(
+                                "Path: ${record.folderPath}",
+                                fontSize = 10.sp,
+                                fontFamily = FontFamily.Monospace,
+                                color = Color.Gray
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+fun Double.format(digits: Int) = String.format(Locale.US, "%.${digits}f", this)
