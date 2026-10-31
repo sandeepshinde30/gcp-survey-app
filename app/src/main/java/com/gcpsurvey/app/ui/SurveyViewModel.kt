@@ -4,6 +4,8 @@ import android.annotation.SuppressLint
 import android.app.Application
 import android.content.Context
 import android.location.Location
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import android.widget.Toast
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
@@ -16,13 +18,17 @@ import com.gcpsurvey.app.network.HotspotInfoState
 import com.google.android.gms.location.FusedLocationProviderClient
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import org.json.JSONObject
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.*
+import java.util.concurrent.TimeUnit
 
 data class SessionState(
     val hotelLat: Double? = null,
@@ -34,9 +40,10 @@ data class SessionState(
     val lastRecordedGcpLat: Double? = null,
     val lastRecordedGcpLon: Double? = null,
     val lastRecordedGcpId: String? = null,
-    val currentSegmentDistance: Double = 0.0,
+    val currentSegmentDistance: Double = 0.0, // यहाँ रोड डिस्टेंस सेव होगी
     val accumulatedDistance: Double = 0.0,
-    val previousPointLabel: String = "Hotel"
+    val previousPointLabel: String = "Hotel",
+    val isDistanceLoading: Boolean = false
 )
 
 class SurveyViewModel(application: Application) : AndroidViewModel(application) {
@@ -163,26 +170,17 @@ class SurveyViewModel(application: Application) : AndroidViewModel(application) 
                 cancellationTokenSource.cancel()
                 if (location != null) {
                     val state = _sessionState.value
-                    var segment = 0.0
                     var prevLabel = state.previousPointLabel
+                    var startLat: Double? = null
+                    var startLon: Double? = null
 
                     if (state.lastRecordedGcpLat != null && state.lastRecordedGcpLon != null) {
-                        val results = FloatArray(1)
-                        Location.distanceBetween(
-                            state.lastRecordedGcpLat, state.lastRecordedGcpLon,
-                            location.latitude, location.longitude,
-                            results
-                        )
-                        segment = results[0].toDouble()
+                        startLat = state.lastRecordedGcpLat
+                        startLon = state.lastRecordedGcpLon
                         prevLabel = "GCP: ${state.lastRecordedGcpId ?: "Previous"}"
                     } else if (state.hotelLat != null && state.hotelLon != null) {
-                        val results = FloatArray(1)
-                        Location.distanceBetween(
-                            state.hotelLat, state.hotelLon,
-                            location.latitude, location.longitude,
-                            results
-                        )
-                        segment = results[0].toDouble()
+                        startLat = state.hotelLat
+                        startLon = state.hotelLon
                         prevLabel = "Hotel"
                     }
 
@@ -191,18 +189,57 @@ class SurveyViewModel(application: Application) : AndroidViewModel(application) 
                         currentGcpLon = location.longitude,
                         currentGcpAlt = if (location.hasAltitude()) location.altitude else null,
                         currentGcpAcc = if (location.hasAccuracy()) location.accuracy else null,
-                        currentSegmentDistance = segment,
-                        previousPointLabel = prevLabel
+                        currentSegmentDistance = 0.0,
+                        previousPointLabel = prevLabel,
+                        isDistanceLoading = if (startLat != null) true else false
                     )
-                    Toast.makeText(context, "GCP Location Captured Successfully!", Toast.LENGTH_SHORT).show()
-                } else {
-                    Toast.makeText(context, "GPS Signal नहीं मिला। खुली जगह पर जाएं।", Toast.LENGTH_LONG).show()
+
+                    if (startLat != null && startLon != null) {
+                        fetchRoadDistance(context, startLat, startLon, location.latitude, location.longitude)
+                    }
                 }
             }
             .addOnFailureListener {
                 cancellationTokenSource.cancel()
                 Toast.makeText(context, "GPS Error: ${it.message}", Toast.LENGTH_LONG).show()
             }
+    }
+
+    private fun fetchRoadDistance(context: Context, startLat: Double, startLon: Double, endLat: Double, endLon: Double) {
+        val url = "https://router.project-osrm.org/route/v1/driving/$startLon,$startLat;$endLon,$endLat?overview=false"
+        
+        Thread {
+            try {
+                val client = okhttp3.OkHttpClient.Builder()
+                    .connectTimeout(5, TimeUnit.SECONDS)
+                    .readTimeout(5, TimeUnit.SECONDS)
+                    .build()
+                val request = okhttp3.Request.Builder().url(url).build()
+                val response = client.newCall(request).execute()
+                
+                if (response.isSuccessful) {
+                    val jsonString = response.body?.string()
+                    val jsonObject = JSONObject(jsonString)
+                    val routes = jsonObject.getJSONArray("routes")
+                    if (routes.length() > 0) {
+                        val distance = routes.getJSONObject(0).getDouble("distance")
+                        
+                        android.os.Handler(android.os.Looper.getMainLooper()).post {
+                            val currentState = _sessionState.value
+                            _sessionState.value = currentState.copy(
+                                currentSegmentDistance = distance,
+                                isDistanceLoading = false
+                            )
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                android.os.Handler(android.os.Looper.getMainLooper()).post {
+                    _sessionState.value = _sessionState.value.copy(isDistanceLoading = false)
+                    Toast.makeText(context, "इंटरनेट नहीं है! रोड डिस्टेंस 0 सेव होगी।", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }.start()
     }
 
     @SuppressLint("MissingPermission")
@@ -241,7 +278,7 @@ class SurveyViewModel(application: Application) : AndroidViewModel(application) 
         val lat = state.currentGcpLat ?: return
         val lon = state.currentGcpLon ?: return
 
-        val segment = state.currentSegmentDistance
+        val segment = state.currentSegmentDistance // यहाँ रोड डिस्टेंस है
         val newAccumulated = state.accumulatedDistance + segment
         val dateToday = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
         val cleanProj = projectName.trim().replace("\\s+".toRegex(), "_")
@@ -287,6 +324,73 @@ class SurveyViewModel(application: Application) : AndroidViewModel(application) 
                 previousPointLabel = "GCP: $gcpId"
             )
         }
+    }
+
+    // --- ऑफलाइन डेटा सिंक करने का फंक्शन ---
+    fun syncPendingDistances(context: Context) {
+        if (!isNetworkAvailable(context)) return
+
+        viewModelScope.launch {
+            try {
+                // उन रिकॉर्ड्स को ढूंढें जिनकी दूरी 0.0 है
+                val pendingRecords = dao.getPendingRecords()
+                if (pendingRecords.isNotEmpty()) {
+                    Toast.makeText(context, "${pendingRecords.size} रिकॉर्ड्स अपडेट हो रहे हैं...", Toast.LENGTH_SHORT).show()
+                    
+                    for (record in pendingRecords) {
+                        var startLat = record.hotelLatitude
+                        var startLon = record.hotelLongitude
+                        
+                        if (startLat != null && startLon != null) {
+                            val distance = fetchRoadDistanceSync(startLat, startLon, record.latitude, record.longitude)
+                            if (distance > 0.0) {
+                                val updatedRecord = record.copy(
+                                    segmentDistanceMeters = distance,
+                                    accumulatedDistanceMeters = record.accumulatedDistanceMeters + distance
+                                )
+                                dao.updateRecord(updatedRecord)
+                            }
+                        }
+                    }
+                    Toast.makeText(context, "पुराने रिकॉर्ड्स अपडेट हो गए!", Toast.LENGTH_SHORT).show()
+                }
+            } catch (e: Exception) {
+                // एरर इग्नोर करें
+            }
+        }
+    }
+
+    private suspend fun fetchRoadDistanceSync(startLat: Double, startLon: Double, endLat: Double, endLon: Double): Double {
+        return withContext(Dispatchers.IO) {
+            try {
+                val url = "https://router.project-osrm.org/route/v1/driving/$startLon,$startLat;$endLon,$endLat?overview=false"
+                val client = okhttp3.OkHttpClient.Builder()
+                    .connectTimeout(5, TimeUnit.SECONDS)
+                    .readTimeout(5, TimeUnit.SECONDS)
+                    .build()
+                val request = okhttp3.Request.Builder().url(url).build()
+                val response = client.newCall(request).execute()
+                
+                if (response.isSuccessful) {
+                    val jsonString = response.body?.string()
+                    val jsonObject = JSONObject(jsonString)
+                    val routes = jsonObject.getJSONArray("routes")
+                    if (routes.length() > 0) {
+                        return@withContext routes.getJSONObject(0).getDouble("distance")
+                    }
+                }
+                0.0
+            } catch (e: Exception) {
+                0.0
+            }
+        }
+    }
+
+    fun isNetworkAvailable(context: Context): Boolean {
+        val connectivityManager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+        val network = connectivityManager.activeNetwork ?: return false
+        val capabilities = connectivityManager.getNetworkCapabilities(network) ?: return false
+        return capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
     }
 
     fun exportCsv(context: Context, onFileReady: (File?) -> Unit) {
