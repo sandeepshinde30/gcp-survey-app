@@ -106,23 +106,39 @@ object CsvExporter {
         }
         return xlsFile
     }
-
     fun createPhotosZip(context: Context): File? {
         val documentsDir = context.getExternalFilesDir(Environment.DIRECTORY_DOCUMENTS) ?: context.filesDir
-        val surveyFolder = File(documentsDir, "GCP_Survey")
-        if (!surveyFolder.exists()) return null
+        // गैलरी (Pictures) और ऐप (Documents) दोनों के फोल्डर चेक करें
+        val galleryFolder = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES), "GCP_Survey")
+        val appFolder = File(documentsDir, "GCP_Survey")
+        
+        if (!galleryFolder.exists() && !appFolder.exists()) return null
 
         val timeStamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
         val zipFile = File(documentsDir, "GCP_All_Folders_Photos_$timeStamp.zip")
 
         ZipOutputStream(FileOutputStream(zipFile)).use { zos ->
-            surveyFolder.walkTopDown().filter { it.isFile && !it.name.endsWith(".zip") }.forEach { file ->
-                val relativePath = file.relativeTo(surveyFolder).path
-                zos.putNextEntry(ZipEntry(relativePath))
-                file.inputStream().use { it.copyTo(zos) }
-                zos.closeEntry()
+            // 1. गैलरी (Pictures) की सारी फोटो जिप में जोड़ें
+            if (galleryFolder.exists()) {
+                galleryFolder.walkTopDown().filter { it.isFile }.forEach { file ->
+                    val relativePath = "Photos/" + file.relativeTo(galleryFolder).path
+                    zos.putNextEntry(ZipEntry(relativePath))
+                    file.inputStream().use { it.copyTo(zos) }
+                    zos.closeEntry()
+                }
+            }
+            
+            // 2. ऐप के अंदर की रिपोर्ट्स (CSV/Excel) भी जिप में जोड़ें
+            if (appFolder.exists()) {
+                appFolder.walkTopDown().filter { it.isFile && !it.name.endsWith(".zip") }.forEach { file ->
+                    val relativePath = "Reports/" + file.relativeTo(appFolder).path
+                    zos.putNextEntry(ZipEntry(relativePath))
+                    file.inputStream().use { it.copyTo(zos) }
+                    zos.closeEntry()
+                }
             }
         }
         return zipFile
     }
 }
+    
