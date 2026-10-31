@@ -88,7 +88,7 @@ fun GcpSurveyApp(viewModel: SurveyViewModel) {
         }
     }
 
-    LaunchedEffect(Unit) {
+       LaunchedEffect(Unit) {
         val hasFine = ContextCompat.checkSelfPermission(
             context,
             Manifest.permission.ACCESS_FINE_LOCATION
@@ -102,6 +102,11 @@ fun GcpSurveyApp(viewModel: SurveyViewModel) {
                     Manifest.permission.CAMERA
                 )
             )
+        }
+        
+        // नया कोड: इंटरनेट होने पर पुराने रिकॉर्ड्स की दूरी सिंक करें
+        if (viewModel.isNetworkAvailable(context)) {
+            viewModel.syncPendingDistances(context)
         }
     }
 
@@ -352,13 +357,21 @@ fun SurveyFormScreen(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    Column {
-                        Text("Current Segment (From -> To)", fontSize = 11.sp, color = Color.Gray)
-                        Text(
-                            "${String.format(Locale.US, "%.2f", session.currentSegmentDistance)} m",
-                            fontSize = 18.sp,
-                            fontWeight = FontWeight.Bold
-                        )
+                                      Column {
+                        Text("Road Distance (From -> To)", fontSize = 11.sp, color = Color.Gray)
+                        
+                        if (session.isDistanceLoading) {
+                            Text("Searching Road...", fontSize = 14.sp, color = Color.Gray)
+                        } else if (session.currentSegmentDistance > 0.0) {
+                            Text(
+                                "${String.format(Locale.US, "%.2f", session.currentSegmentDistance)} m",
+                                fontSize = 18.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        } else {
+                            Text("0.00 m", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                        }
+
                         Text(
                             "From: ${session.previousPointLabel} -> To: $gcpId",
                             fontSize = 10.sp,
