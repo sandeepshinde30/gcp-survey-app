@@ -1,8 +1,12 @@
 package com.gcpsurvey.app
 
 import android.Manifest
+import android.content.ContentValues
 import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
+import android.os.Environment
+import android.provider.MediaStore
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -117,6 +121,24 @@ fun GcpSurveyApp(viewModel: SurveyViewModel) {
                         }
                     },
                     actions = {
+                        // 1. Delete (Storage Clear) Button
+                        IconButton(onClick = {
+                            try {
+                                val galleryDir = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES), "GCP_Survey")
+                                val appDir = File(context.getExternalFilesDir(Environment.DIRECTORY_DOCUMENTS), "GCP_Survey")
+                                
+                                if (galleryDir.exists()) galleryDir.deleteRecursively()
+                                if (appDir.exists()) appDir.deleteRecursively()
+                                
+                                Toast.makeText(context, "All Photos & Data Deleted!", Toast.LENGTH_SHORT).show()
+                            } catch (e: Exception) {
+                                Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
+                            }
+                        }) {
+                            Icon(Icons.Default.Delete, contentDescription = "Clear Storage", tint = Color.Red)
+                        }
+
+                        // 2. Laptop Connect Button
                         FilledTonalButton(
                             onClick = { showLaptopConnect = true },
                             colors = ButtonDefaults.filledTonalButtonColors(
@@ -130,7 +152,7 @@ fun GcpSurveyApp(viewModel: SurveyViewModel) {
                             Text("Laptop Connect", fontSize = 12.sp, fontWeight = FontWeight.Bold)
                         }
                         
-                        // 1. CSV Share Button
+                        // 3. CSV Share Button
                         IconButton(onClick = {
                             viewModel.exportCsv(context) { csvFile ->
                                 if (csvFile != null) {
@@ -150,7 +172,7 @@ fun GcpSurveyApp(viewModel: SurveyViewModel) {
                             Icon(Icons.Default.Share, contentDescription = "Quick CSV Export", modifier = Modifier.size(20.dp))
                         }
 
-                        // 2. Excel Share Button
+                        // 4. Excel Share Button
                         IconButton(onClick = {
                             viewModel.exportExcelXls(context) { excelFile ->
                                 if (excelFile != null) {
@@ -168,7 +190,7 @@ fun GcpSurveyApp(viewModel: SurveyViewModel) {
                             Icon(Icons.Default.GridOn, contentDescription = "Share Excel", modifier = Modifier.size(20.dp))
                         }
 
-                        // 3. Photos ZIP Share Button
+                        // 5. Photos ZIP Share Button
                         IconButton(onClick = {
                             viewModel.exportPhotosZip(context) { zipFile ->
                                 if (zipFile != null) {
@@ -269,12 +291,14 @@ fun SurveyFormScreen(
         contract = ActivityResultContracts.TakePicture()
     ) { success ->
         if (success && currentPhotoUri != null) {
-            val file = File(currentPhotoUri!!.path!!)
             viewModel.takeGeotaggedPhoto(context, currentPhotoSlot) { location ->
                 if (location != null) {
-                    com.gcpsurvey.app.camera.PhotoGeotagManager.injectGpsCoordinates(file, location)
+                    val file = getFileFromUri(context, currentPhotoUri!!)
+                    if (file != null) {
+                        com.gcpsurvey.app.camera.PhotoGeotagManager.injectGpsCoordinates(file, location)
+                    }
                 }
-                Toast.makeText(context, "Photo Saved: $currentPhotoSlot", Toast.LENGTH_SHORT).show()
+                Toast.makeText(context, "Photo Saved with GPS!", Toast.LENGTH_SHORT).show()
             }
         }
     }
@@ -431,7 +455,7 @@ fun SurveyFormScreen(
                     fontWeight = FontWeight.Bold
                 )
                 Text(
-                    "GCP_Survey/$hierarchyFolder",
+                    "Pictures/GCP_Survey/$hierarchyFolder",
                     fontSize = 10.sp,
                     fontFamily = FontFamily.Monospace,
                     color = Color(0xFF047857)
@@ -573,13 +597,17 @@ fun SurveyFormScreen(
                         OutlinedButton(
                             onClick = {
                                 currentPhotoSlot = slot
-                                val photoDir = File(context.getExternalFilesDir(android.os.Environment.DIRECTORY_DOCUMENTS), "GCP_Survey/$hierarchyFolder")
-                                if (!photoDir.exists()) photoDir.mkdirs()
+                                val name = "${gcpId}_${slot.replace(" ", "_")}_${System.currentTimeMillis()}.jpg"
                                 
-                                // रैंडम नंबर हटाकर साफ नाम
-                                val photoFile = File(photoDir, "${gcpId}_${slot.replace(" ", "_")}.jpg")
-                                currentPhotoUri = FileProvider.getUriForFile(context, "${context.packageName}.provider", photoFile)
+                                val values = ContentValues().apply {
+                                    put(MediaStore.Images.Media.DISPLAY_NAME, name)
+                                    put(MediaStore.Images.Media.MIME_TYPE, "image/jpeg")
+                                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                                        put(MediaStore.Images.Media.RELATIVE_PATH, "Pictures/GCP_Survey/$hierarchyFolder")
+                                    }
+                                }
                                 
+                                currentPhotoUri = context.contentResolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values)
                                 cameraLauncher.launch(currentPhotoUri)
                             },
                             modifier = Modifier.weight(1f)
@@ -729,3 +757,23 @@ fun RecordsListScreen(
 }
 
 fun Double.format(digits: Int) = String.format(Locale.US, "%.${digits}f", this)
+
+fun getFileFromUri(context: android.content.Context, uri: android.net.Uri): File? {
+    return try {
+        if (uri.scheme == "content") {
+            val inputStream = context.contentResolver.openInputStream(uri)
+            val file = File(context.cacheDir, "temp_photo.jpg")
+            inputStream?.use { input ->
+                file.outputStream().use { output ->
+                    input.copyTo(output)
+                }
+            }
+            file
+        } else {
+            File(uri.path!!)
+        }
+    } catch (e: Exception) {
+        e.printStackTrace()
+        null
+    }
+}
