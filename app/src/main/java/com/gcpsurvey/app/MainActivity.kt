@@ -2,18 +2,20 @@ package com.gcpsurvey.app
 
 import android.Manifest
 import android.content.ContentValues
+import android.content.Context
 import android.content.pm.PackageManager
+import android.location.LocationManager
 import android.os.Build
 import android.os.Bundle
 import android.os.Environment
 import android.provider.MediaStore
+import android.provider.Settings
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -88,7 +90,7 @@ fun GcpSurveyApp(viewModel: SurveyViewModel) {
         }
     }
 
-       LaunchedEffect(Unit) {
+    LaunchedEffect(Unit) {
         val hasFine = ContextCompat.checkSelfPermission(
             context,
             Manifest.permission.ACCESS_FINE_LOCATION
@@ -104,7 +106,6 @@ fun GcpSurveyApp(viewModel: SurveyViewModel) {
             )
         }
         
-        // नया कोड: इंटरनेट होने पर पुराने रिकॉर्ड्स की दूरी सिंक करें
         if (viewModel.isNetworkAvailable(context)) {
             viewModel.syncPendingDistances(context)
         }
@@ -126,15 +127,12 @@ fun GcpSurveyApp(viewModel: SurveyViewModel) {
                         }
                     },
                     actions = {
-                        // 1. Delete (Storage Clear) Button
                         IconButton(onClick = {
                             try {
                                 val galleryDir = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES), "GCP_Survey")
                                 val appDir = File(context.getExternalFilesDir(Environment.DIRECTORY_DOCUMENTS), "GCP_Survey")
-                                
                                 if (galleryDir.exists()) galleryDir.deleteRecursively()
                                 if (appDir.exists()) appDir.deleteRecursively()
-                                
                                 Toast.makeText(context, "All Photos & Data Deleted!", Toast.LENGTH_SHORT).show()
                             } catch (e: Exception) {
                                 Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
@@ -143,7 +141,6 @@ fun GcpSurveyApp(viewModel: SurveyViewModel) {
                             Icon(Icons.Default.Delete, contentDescription = "Clear Storage", tint = Color.Red)
                         }
 
-                        // 2. Laptop Connect Button
                         FilledTonalButton(
                             onClick = { showLaptopConnect = true },
                             colors = ButtonDefaults.filledTonalButtonColors(
@@ -157,7 +154,6 @@ fun GcpSurveyApp(viewModel: SurveyViewModel) {
                             Text("Laptop Connect", fontSize = 12.sp, fontWeight = FontWeight.Bold)
                         }
                         
-                        // 3. CSV Share Button
                         IconButton(onClick = {
                             viewModel.exportCsv(context) { csvFile ->
                                 if (csvFile != null) {
@@ -169,15 +165,12 @@ fun GcpSurveyApp(viewModel: SurveyViewModel) {
                                         addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
                                     }
                                     context.startActivity(android.content.Intent.createChooser(intent, "Share CSV"))
-                                } else {
-                                    Toast.makeText(context, "Export Failed! No Data.", Toast.LENGTH_SHORT).show()
                                 }
                             }
                         }) {
                             Icon(Icons.Default.Share, contentDescription = "Quick CSV Export", modifier = Modifier.size(20.dp))
                         }
 
-                        // 4. Excel Share Button
                         IconButton(onClick = {
                             viewModel.exportExcelXls(context) { excelFile ->
                                 if (excelFile != null) {
@@ -195,7 +188,6 @@ fun GcpSurveyApp(viewModel: SurveyViewModel) {
                             Icon(Icons.Default.GridOn, contentDescription = "Share Excel", modifier = Modifier.size(20.dp))
                         }
 
-                        // 5. Photos ZIP Share Button
                         IconButton(onClick = {
                             viewModel.exportPhotosZip(context) { zipFile ->
                                 if (zipFile != null) {
@@ -207,8 +199,6 @@ fun GcpSurveyApp(viewModel: SurveyViewModel) {
                                         addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
                                     }
                                     context.startActivity(android.content.Intent.createChooser(intent, "Share Photos Zip"))
-                                } else {
-                                    Toast.makeText(context, "No Photos Found", Toast.LENGTH_SHORT).show()
                                 }
                             }
                         }) {
@@ -291,6 +281,14 @@ fun SurveyFormScreen(
     
     var currentPhotoUri by remember { mutableStateOf<Uri?>(null) }
     var currentPhotoSlot by remember { mutableStateOf("") }
+    
+    // फोटो के नाम सेव करने के लिए
+    val capturedPhotos = remember { mutableStateListOf<String>() }
+
+    // पॉपअप स्टेट्स
+    var showGpsDialog by remember { mutableStateOf(false) }
+    var showInvalidNameDialog by remember { mutableStateOf(false) }
+    var invalidNameMessage by remember { mutableStateOf("") }
 
     val cameraLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.TakePicture()
@@ -302,8 +300,12 @@ fun SurveyFormScreen(
                     if (file != null) {
                         com.gcpsurvey.app.camera.PhotoGeotagManager.injectGpsCoordinates(file, location)
                     }
+                    Toast.makeText(context, "Photo Saved with GPS Location", Toast.LENGTH_LONG).show()
+                } else {
+                    Toast.makeText(context, "Photo Saved, but NO GPS Location found!", Toast.LENGTH_LONG).show()
                 }
-                Toast.makeText(context, "Photo Saved with GPS!", Toast.LENGTH_SHORT).show()
+                // फोटो का नाम लिस्ट में जोड़ें
+                capturedPhotos.add(currentPhotoSlot)
             }
         }
     }
@@ -357,7 +359,7 @@ fun SurveyFormScreen(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                                      Column {
+                    Column {
                         Text("Road Distance (From -> To)", fontSize = 11.sp, color = Color.Gray)
                         
                         if (session.isDistanceLoading) {
@@ -408,11 +410,19 @@ fun SurveyFormScreen(
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Button(
                         onClick = { 
-                            if (ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
+                            if (!isValidGcpName(gcpId)) {
+                                invalidNameMessage = "GCP ID में सिर्फ अक्षर, संख्या, हाइफन (-) और अंडरस्कोर (_) होने चाहिए। स्पेस या कोई अजीब चिन्ह न डालें।\n\n" +
+                                        "GCP ID must contain only letters, numbers, hyphen (-), and underscore (_). Do not use spaces or special characters."
+                                showInvalidNameDialog = true
+                                return@Button
+                            }
+                            if (!isGpsEnabled(context)) {
+                                showGpsDialog = true
+                            } else if (ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
                                 viewModel.captureHotelLocation(context) 
                             } else {
                                 onLocationPermissionRequested()
-                                Toast.makeText(context, "कृपया Location की परमिशन दें और दोबारा दबाएं", Toast.LENGTH_LONG).show()
+                                Toast.makeText(context, "कृपया Location की परमिशन दें", Toast.LENGTH_LONG).show()
                             }
                         },
                         modifier = Modifier.weight(1f),
@@ -425,11 +435,19 @@ fun SurveyFormScreen(
 
                     Button(
                         onClick = { 
-                            if (ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
+                            if (!isValidGcpName(gcpId)) {
+                                invalidNameMessage = "GCP ID में सिर्फ अक्षर, संख्या, हाइफन (-) और अंडरस्कोर (_) होने चाहिए। स्पेस या कोई अजीब चिन्ह न डालें।\n\n" +
+                                        "GCP ID must contain only letters, numbers, hyphen (-), and underscore (_). Do not use spaces or special characters."
+                                showInvalidNameDialog = true
+                                return@Button
+                            }
+                            if (!isGpsEnabled(context)) {
+                                showGpsDialog = true
+                            } else if (ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
                                 viewModel.captureGcpLocation(context) 
                             } else {
                                 onLocationPermissionRequested()
-                                Toast.makeText(context, "कृपया Location की परमिशन दें और दोबारा दबाएं", Toast.LENGTH_LONG).show()
+                                Toast.makeText(context, "कृपया Location की परमिशन दें", Toast.LENGTH_LONG).show()
                             }
                         },
                         modifier = Modifier.weight(1f),
@@ -609,19 +627,27 @@ fun SurveyFormScreen(
                     rowSlots.forEach { slot ->
                         OutlinedButton(
                             onClick = {
-                                currentPhotoSlot = slot
-                                val name = "${gcpId}_${slot.replace(" ", "_")}_${System.currentTimeMillis()}.jpg"
-                                
-                                val values = ContentValues().apply {
-                                    put(MediaStore.Images.Media.DISPLAY_NAME, name)
-                                    put(MediaStore.Images.Media.MIME_TYPE, "image/jpeg")
-                                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                                        put(MediaStore.Images.Media.RELATIVE_PATH, "Pictures/GCP_Survey/$hierarchyFolder")
+                                if (!isValidGcpName(gcpId)) {
+                                    invalidNameMessage = "फोटो खींचने से पहले सही GCP ID डालें (सिर्फ अक्षर, संख्या, -, _)।\n\n" +
+                                            "Please enter a valid GCP ID before taking a photo (letters, numbers, -, _ only)."
+                                    showInvalidNameDialog = true
+                                } else if (!isGpsEnabled(context)) {
+                                    showGpsDialog = true
+                                } else {
+                                    currentPhotoSlot = slot
+                                    val name = "${gcpId}_${slot.replace(" ", "_")}_${System.currentTimeMillis()}.jpg"
+                                    
+                                    val values = ContentValues().apply {
+                                        put(MediaStore.Images.Media.DISPLAY_NAME, name)
+                                        put(MediaStore.Images.Media.MIME_TYPE, "image/jpeg")
+                                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                                            put(MediaStore.Images.Media.RELATIVE_PATH, "Pictures/GCP_Survey/$hierarchyFolder")
+                                        }
                                     }
+                                    
+                                    currentPhotoUri = context.contentResolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values)
+                                    cameraLauncher.launch(currentPhotoUri)
                                 }
-                                
-                                currentPhotoUri = context.contentResolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values)
-                                cameraLauncher.launch(currentPhotoUri)
                             },
                             modifier = Modifier.weight(1f)
                         ) {
@@ -639,6 +665,12 @@ fun SurveyFormScreen(
 
         Button(
             onClick = {
+                if (!isValidGcpName(gcpId)) {
+                    invalidNameMessage = "डेटा सेव करने के लिए सही GCP ID डालें (सिर्फ अक्षर, संख्या, -, _)।\n\n" +
+                            "Please enter a valid GCP ID to save the data (letters, numbers, -, _ only)."
+                    showInvalidNameDialog = true
+                    return@Button
+                }
                 if (session.currentGcpLat == null) {
                     Toast.makeText(context, "Please capture GCP Location first!", Toast.LENGTH_SHORT).show()
                     return@Button
@@ -660,7 +692,8 @@ fun SurveyFormScreen(
                     antennaHeight = antennaHeight.toDoubleOrNull() ?: 1.80,
                     startTime = startTimeString.ifEmpty { finalEndTime },
                     endTime = finalEndTime,
-                    totalObservationTime = finalObsTime
+                    totalObservationTime = finalObsTime,
+                    photosJson = capturedPhotos.joinToString(",") // फोटो के नाम यहाँ सेव होंगे
                 )
                 Toast.makeText(context, "Saved GCP $gcpId to SQLite!", Toast.LENGTH_SHORT).show()
                 val num = gcpId.replace("[^0-9]".toRegex(), "").toIntOrNull() ?: 1
@@ -669,11 +702,55 @@ fun SurveyFormScreen(
                 obsSeconds = 0
                 startTimeString = ""
                 endTimeString = ""
+                capturedPhotos.clear() // सेव करने के बाद लिस्ट खाली करें
             },
             modifier = Modifier.fillMaxWidth().height(48.dp),
             colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
         ) {
             Text("Save GCP Record to SQLite Database", fontWeight = FontWeight.Bold)
+        }
+
+        // GPS Popup (Alert Dialog)
+        if (showGpsDialog) {
+            AlertDialog(
+                onDismissRequest = { showGpsDialog = false },
+                title = { Text("GPS बंद है! (GPS is OFF)", fontWeight = FontWeight.Bold, color = Color.Red) },
+                text = { 
+                    Text(
+                        "लोकेशन कैप्चर करने और फोटो में GPS डालने के लिए कृपया अपने फोन का GPS (Location) ऑन करें।\n\n" +
+                        "Please turn ON your phone's GPS (Location) to capture location and geotag photos."
+                    ) 
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            showGpsDialog = false
+                            context.startActivity(android.content.Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS))
+                        }
+                    ) {
+                        Text("Open Settings")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showGpsDialog = false }) {
+                        Text("Cancel")
+                    }
+                }
+            )
+        }
+
+        // गलत GCP ID वाला Popup
+        if (showInvalidNameDialog) {
+            AlertDialog(
+                onDismissRequest = { showInvalidNameDialog = false },
+                title = { Text("गलत GCP ID! (Invalid GCP ID!)", fontWeight = FontWeight.Bold, color = Color.Red) },
+                text = { Text(invalidNameMessage) },
+                confirmButton = {
+                    TextButton(onClick = { showInvalidNameDialog = false }) {
+                        Text("OK")
+                    }
+                }
+            )
         }
     }
 }
@@ -739,54 +816,4 @@ fun RecordsListScreen(
                             )
                             
                             Text(
-                                "From: ${if (record.previousPointType == "hotel") "Hotel" else record.previousPointId} -> To: ${record.gcpId}",
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.secondary
-                            )
-                            Text(
-                                "Segment: ${String.format(Locale.US, "%.2f", record.segmentDistanceMeters)}m | Total: ${String.format(Locale.US, "%.2f", record.accumulatedDistanceMeters)}m",
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Medium,
-                                color = MaterialTheme.colorScheme.primary
-                            )
-                            Text(
-                                "Project: ${record.projectName} • ${record.city} • Ant: ${record.antennaHeight}m",
-                                fontSize = 11.sp,
-                                color = Color.DarkGray
-                            )
-                            Text(
-                                "Path: ${record.folderPath}",
-                                fontSize = 10.sp,
-                                fontFamily = FontFamily.Monospace,
-                                color = Color.Gray
-                            )
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-fun Double.format(digits: Int) = String.format(Locale.US, "%.${digits}f", this)
-
-fun getFileFromUri(context: android.content.Context, uri: android.net.Uri): File? {
-    return try {
-        if (uri.scheme == "content") {
-            val inputStream = context.contentResolver.openInputStream(uri)
-            val file = File(context.cacheDir, "temp_photo.jpg")
-            inputStream?.use { input ->
-                file.outputStream().use { output ->
-                    input.copyTo(output)
-                }
-            }
-            file
-        } else {
-            File(uri.path!!)
-        }
-    } catch (e: Exception) {
-        e.printStackTrace()
-        null
-    }
-}
+                                "From: ${if
