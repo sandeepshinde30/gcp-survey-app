@@ -19,10 +19,14 @@ abstract class GcpDatabase : RoomDatabase() {
                     context.applicationContext,
                     GcpDatabase::class.java,
                     "gcp_survey_database.db"
-                ).build()
+                )
+                    // ⬇️ Agar schema change ho, purana DB delete karke naya bana do
+                    .fallbackToDestructiveMigration()
+                    .build()
                 INSTANCE = instance
                 instance
             }
         }
     }
 }
+// ✅ File end
