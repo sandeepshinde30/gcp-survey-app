@@ -3,61 +3,70 @@ package com.gcpsurvey.app.camera
 import android.location.Location
 import androidx.exifinterface.media.ExifInterface
 import java.io.File
+import java.util.Locale
 
 object PhotoGeotagManager {
-    
+
+    /**
+     * Injects GPS coordinates (lat/lon/altitude) into the photo's EXIF metadata.
+     *
+     * @param photoFile The photo file on disk (JPEG)
+     * @param location  GPS location from FusedLocationProvider
+     */
     fun injectGpsCoordinates(photoFile: File, location: Location) {
         try {
-            // फोटो को एक्सिफ (Exif) डेटा के लिए खोलें
             val exif = ExifInterface(photoFile.absolutePath)
-            
-            // Latitude (अक्षांश) को सेव करें
+
+            // ---- Latitude ----
             exif.setAttribute(
-                ExifInterface.TAG_GPS_LATITUDE, 
+                ExifInterface.TAG_GPS_LATITUDE,
                 convertToDegreeMinuteSecond(location.latitude)
             )
             exif.setAttribute(
-                ExifInterface.TAG_GPS_LATITUDE_REF, 
+                ExifInterface.TAG_GPS_LATITUDE_REF,
                 if (location.latitude >= 0) "N" else "S"
             )
-            
-            // Longitude (देशांतर) को सेव करें
+
+            // ---- Longitude ----
             exif.setAttribute(
-                ExifInterface.TAG_GPS_LONGITUDE, 
+                ExifInterface.TAG_GPS_LONGITUDE,
                 convertToDegreeMinuteSecond(location.longitude)
             )
             exif.setAttribute(
-                ExifInterface.TAG_GPS_LONGITUDE_REF, 
+                ExifInterface.TAG_GPS_LONGITUDE_REF,
                 if (location.longitude >= 0) "E" else "W"
             )
-            
-            // Altitude (ऊंचाई) को सेव करें (अगर उपलब्ध हो)
+
+            // ---- Altitude (if available) ----
             if (location.hasAltitude()) {
                 exif.setAttribute(
-                    ExifInterface.TAG_GPS_ALTITUDE, 
+                    ExifInterface.TAG_GPS_ALTITUDE,
                     "${location.altitude}/1"
                 )
                 exif.setAttribute(
-                    ExifInterface.TAG_GPS_ALTITUDE_REF, 
-                    "0" // 0 का मतलब समुद्र तल से ऊपर
+                    ExifInterface.TAG_GPS_ALTITUDE_REF,
+                    "0" // 0 = above sea level
                 )
             }
-            
-            // सारे बदलाव फोटो में सेव करें
+
+            // ---- Save ----
             exif.saveAttributes()
-            
+
         } catch (e: Exception) {
             e.printStackTrace()
         }
     }
 
-    // GPS को डिग्री, मिनट और सेकंड (DMS) फॉर्मेट में बदलने का तरीका
+    /**
+     * Converts decimal degrees to EXIF DMS format: "degrees/1,minutes/1,seconds/1".
+     */
     private fun convertToDegreeMinuteSecond(coordinate: Double): String {
         val absolute = Math.abs(coordinate)
         val degrees = absolute.toInt()
         val minutes = ((absolute - degrees) * 60).toInt()
         val seconds = (((absolute - degrees) * 60) - minutes) * 60
-        val secondsFormatted = String.format(java.util.Locale.US, "%.6f", seconds)
+        val secondsFormatted = String.format(Locale.US, "%.6f", seconds)
         return "$degrees/1,$minutes/1,$secondsFormatted/1"
     }
 }
+// ✅ File end
