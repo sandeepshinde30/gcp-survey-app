@@ -173,7 +173,7 @@ class SurveyViewModel(application: Application) : AndroidViewModel(application) 
         Toast.makeText(context, "Locating GCP GPS... कृपया 5-10 सेकंड रुकें", Toast.LENGTH_SHORT).show()
         val cancellationTokenSource = com.google.android.gms.tasks.CancellationTokenSource()
         fusedLocationClient.getCurrentLocation(
-            Priority.PRIORITY_BALANCED_ACCURACY,
+            Priority.PRIORITY_HIGH_ACCURACY,
             cancellationTokenSource.token
         )
             .addOnSuccessListener { location: Location? ->
