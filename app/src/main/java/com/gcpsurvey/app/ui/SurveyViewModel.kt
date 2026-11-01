@@ -12,9 +12,9 @@ import androidx.lifecycle.viewModelScope
 import com.gcpsurvey.app.data.GcpDatabase
 import com.gcpsurvey.app.data.GcpSurveyEntity
 import com.gcpsurvey.app.export.CsvExporter
+import com.gcpsurvey.app.network.HotspotInfoState
 import com.gcpsurvey.app.network.LocalHotspotServer
 import com.gcpsurvey.app.network.LocalOnlyHotspotManager
-import com.gcpsurvey.app.network.HotspotInfoState
 import com.google.android.gms.location.FusedLocationProviderClient
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
@@ -27,8 +27,11 @@ import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.io.File
 import java.text.SimpleDateFormat
-import java.util.*
+import java.util.Date
+import java.util.Locale
 import java.util.concurrent.TimeUnit
+
+// ===================== Session State =====================
 
 data class SessionState(
     val hotelLat: Double? = null,
@@ -40,13 +43,16 @@ data class SessionState(
     val lastRecordedGcpLat: Double? = null,
     val lastRecordedGcpLon: Double? = null,
     val lastRecordedGcpId: String? = null,
-    val currentSegmentDistance: Double = 0.0, // यहाँ रोड डिस्टेंस सेव होगी
+    val currentSegmentDistance: Double = 0.0,
     val accumulatedDistance: Double = 0.0,
     val previousPointLabel: String = "Hotel",
     val isDistanceLoading: Boolean = false
 )
 
+// ===================== ViewModel =====================
+
 class SurveyViewModel(application: Application) : AndroidViewModel(application) {
+
     private val dao = GcpDatabase.getDatabase(application).gcpDao()
     val allRecords = dao.getAllRecords()
 
@@ -56,12 +62,14 @@ class SurveyViewModel(application: Application) : AndroidViewModel(application) 
     private val _sessionState = MutableStateFlow(SessionState())
     val sessionState: StateFlow<SessionState> = _sessionState.asStateFlow()
 
-    // Hotspot & Web Server State
+    // Hotspot & Web Server
     private val hotspotManager = LocalOnlyHotspotManager(application)
     private val localServer = LocalHotspotServer(application, 8080)
 
     private val _hotspotState = MutableStateFlow(HotspotInfoState())
     val hotspotState: StateFlow<HotspotInfoState> = _hotspotState.asStateFlow()
+
+    // ===================== Hotspot + Web Server =====================
 
     fun startHotspotAndServer(context: Context) {
         try {
@@ -105,7 +113,7 @@ class SurveyViewModel(application: Application) : AndroidViewModel(application) 
             try {
                 localServer.start()
             } catch (ex: Exception) {
-                 Toast.makeText(context, "Server Error: ${ex.message}", Toast.LENGTH_LONG).show()
+                Toast.makeText(context, "Server Error: ${ex.message}", Toast.LENGTH_LONG).show()
             }
         }
     }
@@ -114,8 +122,8 @@ class SurveyViewModel(application: Application) : AndroidViewModel(application) 
         try {
             localServer.stop()
             hotspotManager.stopHotspot()
-        } catch (e: Exception) {
-            // Ignore
+        } catch (_: Exception) {
+            // ignore
         }
         _hotspotState.value = _hotspotState.value.copy(isActive = false)
     }
@@ -125,10 +133,12 @@ class SurveyViewModel(application: Application) : AndroidViewModel(application) 
         try {
             localServer.stop()
             hotspotManager.stopHotspot()
-        } catch (e: Exception) {
-            // Ignore
+        } catch (_: Exception) {
+            // ignore
         }
     }
+
+    // ===================== GPS Capture =====================
 
     @SuppressLint("MissingPermission")
     fun captureHotelLocation(context: Context) {
@@ -163,7 +173,7 @@ class SurveyViewModel(application: Application) : AndroidViewModel(application) 
         Toast.makeText(context, "Locating GCP GPS... कृपया 5-10 सेकंड रुकें", Toast.LENGTH_SHORT).show()
         val cancellationTokenSource = com.google.android.gms.tasks.CancellationTokenSource()
         fusedLocationClient.getCurrentLocation(
-            Priority.PRIORITY_BALANCED_POWER_ACCURACY,
+            Priority.PRIORITY_BALANCED_ACCURACY,
             cancellationTokenSource.token
         )
             .addOnSuccessListener { location: Location? ->
@@ -205,43 +215,6 @@ class SurveyViewModel(application: Application) : AndroidViewModel(application) 
             }
     }
 
-    private fun fetchRoadDistance(context: Context, startLat: Double, startLon: Double, endLat: Double, endLon: Double) {
-        val url = "https://router.project-osrm.org/route/v1/driving/$startLon,$startLat;$endLon,$endLat?overview=false"
-        
-        Thread {
-            try {
-                val client = okhttp3.OkHttpClient.Builder()
-                    .connectTimeout(5, TimeUnit.SECONDS)
-                    .readTimeout(5, TimeUnit.SECONDS)
-                    .build()
-                val request = okhttp3.Request.Builder().url(url).build()
-                val response = client.newCall(request).execute()
-                
-                if (response.isSuccessful) {
-                    val jsonString = response.body?.string()
-                    val jsonObject = JSONObject(jsonString)
-                    val routes = jsonObject.getJSONArray("routes")
-                    if (routes.length() > 0) {
-                        val distance = routes.getJSONObject(0).getDouble("distance")
-                        
-                        android.os.Handler(android.os.Looper.getMainLooper()).post {
-                            val currentState = _sessionState.value
-                            _sessionState.value = currentState.copy(
-                                currentSegmentDistance = distance,
-                                isDistanceLoading = false
-                            )
-                        }
-                    }
-                }
-            } catch (e: Exception) {
-                android.os.Handler(android.os.Looper.getMainLooper()).post {
-                    _sessionState.value = _sessionState.value.copy(isDistanceLoading = false)
-                    Toast.makeText(context, "इंटरनेट नहीं है! रोड डिस्टेंस 0 सेव होगी।", Toast.LENGTH_SHORT).show()
-                }
-            }
-        }.start()
-    }
-
     @SuppressLint("MissingPermission")
     fun takeGeotaggedPhoto(context: Context, slotName: String, onLocationAcquired: (Location?) -> Unit = {}) {
         val cancellationTokenSource = com.google.android.gms.tasks.CancellationTokenSource()
@@ -259,6 +232,94 @@ class SurveyViewModel(application: Application) : AndroidViewModel(application) 
             }
     }
 
+    // ===================== Distance Fetch (OSRM) =====================
+
+    private fun fetchRoadDistance(
+        context: Context,
+        startLat: Double,
+        startLon: Double,
+        endLat: Double,
+        endLon: Double
+    ) {
+        val url = "https://router.project-osrm.org/route/v1/driving/" +
+                "$startLon,$startLat;$endLon,$endLat?overview=false"
+
+        Thread {
+            try {
+                val client = okhttp3.OkHttpClient.Builder()
+                    .connectTimeout(5, TimeUnit.SECONDS)
+                    .readTimeout(5, TimeUnit.SECONDS)
+                    .build()
+                val request = okhttp3.Request.Builder().url(url).build()
+                val response = client.newCall(request).execute()
+
+                if (response.isSuccessful) {
+                    val jsonString = response.body?.string()
+                    val jsonObject = JSONObject(jsonString ?: "")
+                    val routes = jsonObject.getJSONArray("routes")
+                    if (routes.length() > 0) {
+                        val distance = routes.getJSONObject(0).getDouble("distance")
+
+                        android.os.Handler(android.os.Looper.getMainLooper()).post {
+                            val currentState = _sessionState.value
+                            _sessionState.value = currentState.copy(
+                                currentSegmentDistance = distance,
+                                isDistanceLoading = false
+                            )
+                        }
+                    } else {
+                        android.os.Handler(android.os.Looper.getMainLooper()).post {
+                            _sessionState.value = _sessionState.value.copy(isDistanceLoading = false)
+                        }
+                    }
+                } else {
+                    android.os.Handler(android.os.Looper.getMainLooper()).post {
+                        _sessionState.value = _sessionState.value.copy(isDistanceLoading = false)
+                    }
+                }
+            } catch (e: Exception) {
+                android.os.Handler(android.os.Looper.getMainLooper()).post {
+                    _sessionState.value = _sessionState.value.copy(isDistanceLoading = false)
+                    Toast.makeText(context, "इंटरनेट नहीं है! रोड डिस्टेंस 0 सेव होगी।", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }.start()
+    }
+
+    private suspend fun fetchRoadDistanceSync(
+        startLat: Double,
+        startLon: Double,
+        endLat: Double,
+        endLon: Double
+    ): Double {
+        return withContext(Dispatchers.IO) {
+            try {
+                val url = "https://router.project-osrm.org/route/v1/driving/" +
+                        "$startLon,$startLat;$endLon,$endLat?overview=false"
+                val client = okhttp3.OkHttpClient.Builder()
+                    .connectTimeout(5, TimeUnit.SECONDS)
+                    .readTimeout(5, TimeUnit.SECONDS)
+                    .build()
+                val request = okhttp3.Request.Builder().url(url).build()
+                val response = client.newCall(request).execute()
+
+                if (response.isSuccessful) {
+                    val jsonString = response.body?.string()
+                    val jsonObject = JSONObject(jsonString ?: "")
+                    val routes = jsonObject.getJSONArray("routes")
+                    if (routes.length() > 0) {
+                        return@withContext routes.getJSONObject(0).getDouble("distance")
+                    }
+                }
+                0.0
+            } catch (_: Exception) {
+                0.0
+            }
+        }
+    }
+
+    // ===================== Save Record =====================
+
     fun saveSurveyRecord(
         gcpId: String,
         projectName: String,
@@ -272,13 +333,13 @@ class SurveyViewModel(application: Application) : AndroidViewModel(application) 
         startTime: String? = null,
         endTime: String? = null,
         totalObservationTime: String? = null,
-        photosJson: String = "{}"
+        photosJson: String = ""
     ) {
         val state = _sessionState.value
         val lat = state.currentGcpLat ?: return
         val lon = state.currentGcpLon ?: return
 
-        val segment = state.currentSegmentDistance // यहाँ रोड डिस्टेंस है
+        val segment = state.currentSegmentDistance
         val newAccumulated = state.accumulatedDistance + segment
         val dateToday = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
         val cleanProj = projectName.trim().replace("\\s+".toRegex(), "_")
@@ -305,12 +366,17 @@ class SurveyViewModel(application: Application) : AndroidViewModel(application) 
             accuracy = state.currentGcpAcc,
             hotelLatitude = state.hotelLat,
             hotelLongitude = state.hotelLon,
-            previousPointType = if (state.lastRecordedGcpId != null) "gcp" else if (state.hotelLat != null) "hotel" else "none",
+            previousPointType = when {
+                state.lastRecordedGcpId != null -> "gcp"
+                state.hotelLat != null -> "hotel"
+                else -> "none"
+            },
             previousPointId = state.lastRecordedGcpId,
             segmentDistanceMeters = segment,
             accumulatedDistanceMeters = newAccumulated,
             folderPath = folderPath,
-            photosJson = photosJson
+            photosJson = photosJson,
+            distanceSynced = segment > 0.0
         )
 
         viewModelScope.launch {
@@ -326,27 +392,44 @@ class SurveyViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
-    // --- ऑफलाइन डेटा सिंक करने का फंक्शन ---
+    // ===================== Delete Record =====================
+
+    fun deleteRecord(id: Long) {
+        viewModelScope.launch {
+            dao.deleteRecordById(id)
+        }
+    }
+
+    // ===================== Offline Sync =====================
+
     fun syncPendingDistances(context: Context) {
         if (!isNetworkAvailable(context)) return
 
         viewModelScope.launch {
             try {
-                // उन रिकॉर्ड्स को ढूंढें जिनकी दूरी 0.0 है
                 val pendingRecords = dao.getPendingRecords()
                 if (pendingRecords.isNotEmpty()) {
-                    Toast.makeText(context, "${pendingRecords.size} रिकॉर्ड्स अपडेट हो रहे हैं...", Toast.LENGTH_SHORT).show()
-                    
+                    Toast.makeText(
+                        context,
+                        "${pendingRecords.size} रिकॉर्ड्स अपडेट हो रहे हैं...",
+                        Toast.LENGTH_SHORT
+                    ).show()
+
                     for (record in pendingRecords) {
-                        var startLat = record.hotelLatitude
-                        var startLon = record.hotelLongitude
-                        
+                        val startLat = record.hotelLatitude
+                        val startLon = record.hotelLongitude
+
                         if (startLat != null && startLon != null) {
-                            val distance = fetchRoadDistanceSync(startLat, startLon, record.latitude, record.longitude)
+                            val distance = fetchRoadDistanceSync(
+                                startLat, startLon,
+                                record.latitude, record.longitude
+                            )
                             if (distance > 0.0) {
                                 val updatedRecord = record.copy(
                                     segmentDistanceMeters = distance,
-                                    accumulatedDistanceMeters = record.accumulatedDistanceMeters + distance
+                                    accumulatedDistanceMeters =
+                                        (record.accumulatedDistanceMeters - record.segmentDistanceMeters) + distance,
+                                    distanceSynced = true
                                 )
                                 dao.updateRecord(updatedRecord)
                             }
@@ -354,44 +437,22 @@ class SurveyViewModel(application: Application) : AndroidViewModel(application) 
                     }
                     Toast.makeText(context, "पुराने रिकॉर्ड्स अपडेट हो गए!", Toast.LENGTH_SHORT).show()
                 }
-            } catch (e: Exception) {
-                // एरर इग्नोर करें
+            } catch (_: Exception) {
+                // ignore
             }
         }
     }
 
-    private suspend fun fetchRoadDistanceSync(startLat: Double, startLon: Double, endLat: Double, endLon: Double): Double {
-        return withContext(Dispatchers.IO) {
-            try {
-                val url = "https://router.project-osrm.org/route/v1/driving/$startLon,$startLat;$endLon,$endLat?overview=false"
-                val client = okhttp3.OkHttpClient.Builder()
-                    .connectTimeout(5, TimeUnit.SECONDS)
-                    .readTimeout(5, TimeUnit.SECONDS)
-                    .build()
-                val request = okhttp3.Request.Builder().url(url).build()
-                val response = client.newCall(request).execute()
-                
-                if (response.isSuccessful) {
-                    val jsonString = response.body?.string()
-                    val jsonObject = JSONObject(jsonString)
-                    val routes = jsonObject.getJSONArray("routes")
-                    if (routes.length() > 0) {
-                        return@withContext routes.getJSONObject(0).getDouble("distance")
-                    }
-                }
-                0.0
-            } catch (e: Exception) {
-                0.0
-            }
-        }
-    }
+    // ===================== Network Check =====================
 
     fun isNetworkAvailable(context: Context): Boolean {
-        val connectivityManager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
-        val network = connectivityManager.activeNetwork ?: return false
-        val capabilities = connectivityManager.getNetworkCapabilities(network) ?: return false
+        val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+        val network = cm.activeNetwork ?: return false
+        val capabilities = cm.getNetworkCapabilities(network) ?: return false
         return capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
     }
+
+    // ===================== Exports =====================
 
     fun exportCsv(context: Context, onFileReady: (File?) -> Unit) {
         viewModelScope.launch {
@@ -416,3 +477,4 @@ class SurveyViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 }
+// ✅ File end
