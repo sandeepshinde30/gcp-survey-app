@@ -5,6 +5,7 @@ import android.content.ContentValues
 import android.content.Context
 import android.content.pm.PackageManager
 import android.location.LocationManager
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.Environment
@@ -33,16 +34,15 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
-import android.net.Uri
-import androidx.core.content.FileProvider
-import java.io.File
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
+import androidx.core.content.FileProvider
 import com.gcpsurvey.app.data.GcpSurveyEntity
 import com.gcpsurvey.app.ui.LaptopSyncScreen
 import com.gcpsurvey.app.ui.SurveyViewModel
+import java.io.File
 import java.util.Locale
 
 class MainActivity : ComponentActivity() {
@@ -69,6 +69,46 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+// ===================== Helper functions =====================
+
+fun isValidGcpName(name: String): Boolean {
+    if (name.isBlank()) return false
+    return Regex("^[A-Za-z0-9_-]+$").matches(name.trim())
+}
+
+fun isGpsEnabled(context: Context): Boolean {
+    val lm = context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
+    return try {
+        lm.isProviderEnabled(LocationManager.GPS_PROVIDER) ||
+                lm.isProviderEnabled(LocationManager.NETWORK_PROVIDER)
+    } catch (_: Exception) {
+        false
+    }
+}
+
+fun getFileFromUri(context: Context, uri: Uri): File? {
+    return try {
+        when (uri.scheme) {
+            "file" -> File(uri.path!!)
+            "content" -> {
+                val input = context.contentResolver.openInputStream(uri) ?: return null
+                val tmp = File(context.cacheDir, "tmp_${System.currentTimeMillis()}.jpg")
+                tmp.outputStream().use { out -> input.copyTo(out) }
+                input.close()
+                tmp
+            }
+            else -> null
+        }
+    } catch (_: Exception) {
+        null
+    }
+}
+
+fun Double.format(decimals: Int): String =
+    String.format(Locale.US, "%.${decimals}f", this)
+
+// ===================== App root =====================
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun GcpSurveyApp(viewModel: SurveyViewModel) {
@@ -76,7 +116,6 @@ fun GcpSurveyApp(viewModel: SurveyViewModel) {
     var selectedTab by remember { mutableStateOf(0) }
     var showLaptopConnect by remember { mutableStateOf(false) }
     val records by viewModel.allRecords.collectAsState(initial = emptyList())
-    val sessionState by viewModel.sessionState.collectAsState()
 
     val locationPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestMultiplePermissions()
@@ -123,14 +162,24 @@ fun GcpSurveyApp(viewModel: SurveyViewModel) {
                     title = {
                         Column {
                             Text("GCP Survey Tracker", fontWeight = FontWeight.Bold, fontSize = 18.sp)
-                            Text("Offline SQLite • WGS-84", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(
+                                "Offline SQLite • WGS-84",
+                                fontSize = 11.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
                         }
                     },
                     actions = {
                         IconButton(onClick = {
                             try {
-                                val galleryDir = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES), "GCP_Survey")
-                                val appDir = File(context.getExternalFilesDir(Environment.DIRECTORY_DOCUMENTS), "GCP_Survey")
+                                val galleryDir = File(
+                                    Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES),
+                                    "GCP_Survey"
+                                )
+                                val appDir = File(
+                                    context.getExternalFilesDir(Environment.DIRECTORY_DOCUMENTS),
+                                    "GCP_Survey"
+                                )
                                 if (galleryDir.exists()) galleryDir.deleteRecursively()
                                 if (appDir.exists()) appDir.deleteRecursively()
                                 Toast.makeText(context, "All Photos & Data Deleted!", Toast.LENGTH_SHORT).show()
@@ -244,12 +293,18 @@ fun GcpSurveyApp(viewModel: SurveyViewModel) {
                         }
                     )
                 } else {
-                    RecordsListScreen(records = records, viewModel = viewModel, onOpenTransferHub = { showLaptopConnect = true })
+                    RecordsListScreen(
+                        records = records,
+                        viewModel = viewModel,
+                        onOpenTransferHub = { showLaptopConnect = true }
+                    )
                 }
             }
         }
     }
 }
+
+// ===================== Survey Form =====================
 
 @Composable
 fun SurveyFormScreen(
@@ -282,10 +337,8 @@ fun SurveyFormScreen(
     var currentPhotoUri by remember { mutableStateOf<Uri?>(null) }
     var currentPhotoSlot by remember { mutableStateOf("") }
 
-    // फोटो के नाम सेव करने के लिए
     val capturedPhotos = remember { mutableStateListOf<String>() }
 
-    // पॉपअप स्टेट्स
     var showGpsDialog by remember { mutableStateOf(false) }
     var showInvalidNameDialog by remember { mutableStateOf(false) }
     var invalidNameMessage by remember { mutableStateOf("") }
@@ -304,7 +357,6 @@ fun SurveyFormScreen(
                 } else {
                     Toast.makeText(context, "Photo Saved, but NO GPS Location found!", Toast.LENGTH_LONG).show()
                 }
-                // फोटो का नाम लिस्ट में जोड़ें
                 capturedPhotos.add(currentPhotoSlot)
             }
         }
@@ -331,7 +383,9 @@ fun SurveyFormScreen(
         else String.format(java.util.Locale.US, "%02dm %02ds", m, s)
     }
 
-    val todayDate = remember { java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).format(java.util.Date()) }
+    val todayDate = remember {
+        java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).format(java.util.Date())
+    }
     val cleanProj = projectName.trim().replace("\\s+".toRegex(), "_")
     val cleanOp = operatorName.trim().replace("\\s+".toRegex(), "_")
     val hierarchyFolder = "$cleanProj/$cleanOp/$todayDate/$gcpId/"
@@ -343,6 +397,7 @@ fun SurveyFormScreen(
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
+        // ---- Distance card ----
         Card(
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
             shape = RoundedCornerShape(12.dp)
@@ -361,7 +416,6 @@ fun SurveyFormScreen(
                 ) {
                     Column {
                         Text("Road Distance (From -> To)", fontSize = 11.sp, color = Color.Gray)
-
                         if (session.isDistanceLoading) {
                             Text("Searching Road...", fontSize = 14.sp, color = Color.Gray)
                         } else if (session.currentSegmentDistance > 0.0) {
@@ -373,7 +427,6 @@ fun SurveyFormScreen(
                         } else {
                             Text("0.00 m", fontSize = 18.sp, fontWeight = FontWeight.Bold)
                         }
-
                         Text(
                             "From: ${session.previousPointLabel} -> To: $gcpId",
                             fontSize = 10.sp,
@@ -390,16 +443,13 @@ fun SurveyFormScreen(
                             fontWeight = FontWeight.Bold,
                             color = Color(0xFF0D9488)
                         )
-                        Text(
-                            "Total Travel Today",
-                            fontSize = 10.sp,
-                            color = Color.Gray
-                        )
+                        Text("Total Travel Today", fontSize = 10.sp, color = Color.Gray)
                     }
                 }
             }
         }
 
+        // ---- GPS capture card ----
         Card(
             colors = CardDefaults.cardColors(containerColor = Color(0xFFF8FAFC)),
             shape = RoundedCornerShape(12.dp)
@@ -411,7 +461,9 @@ fun SurveyFormScreen(
                     Button(
                         onClick = {
                             if (!isValidGcpName(gcpId)) {
-                                invalidNameMessage = "GCP ID में सिर्फ अक्षर, संख्या, हाइफन (-) और अंडरस्कोर (_) होने चाहिए। स्पेस या कोई अजीब चिन्ह न डालें।\n\nGCP ID must contain only letters, numbers, hyphen (-), and underscore (_). Do not use spaces or special characters."
+                                invalidNameMessage =
+                                    "GCP ID में सिर्फ अक्षर, संख्या, हाइफन (-) और अंडरस्कोर (_) होने चाहिए। स्पेस या कोई अजीब चिन्ह न डालें।\n\n" +
+                                    "GCP ID must contain only letters, numbers, hyphen (-), and underscore (_). Do not use spaces or special characters."
                                 showInvalidNameDialog = true
                                 return@Button
                             }
@@ -421,7 +473,7 @@ fun SurveyFormScreen(
                                 viewModel.captureHotelLocation(context)
                             } else {
                                 onLocationPermissionRequested()
-                                Toast.makeText(context, "कृपया Location की परमिशन दें", Toast.LENGTH_LONG).show()
+                                Toast.makeText(context, "कृपया Location की परमिशन दें / Please grant Location permission", Toast.LENGTH_LONG).show()
                             }
                         },
                         modifier = Modifier.weight(1f),
@@ -435,7 +487,9 @@ fun SurveyFormScreen(
                     Button(
                         onClick = {
                             if (!isValidGcpName(gcpId)) {
-                                invalidNameMessage = "GCP ID में सिर्फ अक्षर, संख्या, हाइफन (-) और अंडरस्कोर (_) होने चाहिए। स्पेस या कोई अजीब चिन्ह न डालें।\n\nGCP ID must contain only letters, numbers, hyphen (-), and underscore (_). Do not use spaces or special characters."
+                                invalidNameMessage =
+                                    "GCP ID में सिर्फ अक्षर, संख्या, हाइफन (-) और अंडरस्कोर (_) होने चाहिए। स्पेस या कोई अजीब चिन्ह न डालें।\n\n" +
+                                    "GCP ID must contain only letters, numbers, hyphen (-), and underscore (_). Do not use spaces or special characters."
                                 showInvalidNameDialog = true
                                 return@Button
                             }
@@ -445,7 +499,7 @@ fun SurveyFormScreen(
                                 viewModel.captureGcpLocation(context)
                             } else {
                                 onLocationPermissionRequested()
-                                Toast.makeText(context, "कृपया Location की परमिशन दें", Toast.LENGTH_LONG).show()
+                                Toast.makeText(context, "कृपया Location की परमिशन दें / Please grant Location permission", Toast.LENGTH_LONG).show()
                             }
                         },
                         modifier = Modifier.weight(1f),
@@ -476,13 +530,8 @@ fun SurveyFormScreen(
                     )
                 }
 
-                Divider(color = Color.LightGray, thickness = 1.dp)
-                Text(
-                    "Current Save Path:",
-                    fontSize = 11.sp,
-                    color = Color.Gray,
-                    fontWeight = FontWeight.Bold
-                )
+                HorizontalDivider(color = Color.LightGray, thickness = 1.dp)
+                Text("Current Save Path:", fontSize = 11.sp, color = Color.Gray, fontWeight = FontWeight.Bold)
                 Text(
                     "Pictures/GCP_Survey/$hierarchyFolder",
                     fontSize = 10.sp,
@@ -492,8 +541,66 @@ fun SurveyFormScreen(
             }
         }
 
+        // ---- Observation timer ----
         Text("Survey Metadata & Observation Timing", fontWeight = FontWeight.SemiBold)
 
+        Card(
+            colors = CardDefaults.cardColors(containerColor = Color(0xFFFFFBEB)),
+            shape = RoundedCornerShape(12.dp)
+        ) {
+            Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column {
+                        Text("Observation Duration", fontSize = 11.sp, color = Color.Gray)
+                        Text(formattedDuration, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Button(
+                            onClick = {
+                                if (!isObserving) {
+                                    isObserving = true
+                                }
+                            },
+                            enabled = !isObserving,
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF16A34A))
+                        ) { Text("Start", fontSize = 12.sp) }
+
+                        Button(
+                            onClick = {
+                                isObserving = false
+                                endTimeString = java.text.SimpleDateFormat(
+                                    "yyyy-MM-dd HH:mm:ss",
+                                    java.util.Locale.US
+                                ).format(java.util.Date())
+                            },
+                            enabled = isObserving,
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFDC2626))
+                        ) { Text("Stop", fontSize = 12.sp) }
+
+                        OutlinedButton(
+                            onClick = {
+                                isObserving = false
+                                obsSeconds = 0
+                                startTimeString = ""
+                                endTimeString = ""
+                            }
+                        ) { Text("Reset", fontSize = 12.sp) }
+                    }
+                }
+                if (startTimeString.isNotEmpty()) {
+                    Text("Start: $startTimeString", fontSize = 11.sp, fontFamily = FontFamily.Monospace)
+                }
+                if (endTimeString.isNotEmpty()) {
+                    Text("End: $endTimeString", fontSize = 11.sp, fontFamily = FontFamily.Monospace)
+                }
+            }
+        }
+
+        // ---- Metadata fields ----
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedTextField(
                 value = projectName,
@@ -610,6 +717,33 @@ fun SurveyFormScreen(
             }
         }
 
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Box(modifier = Modifier.weight(1f)) {
+                OutlinedButton(
+                    onClick = { markExpanded = true },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Mark: ${pointMarkType.uppercase()}", fontSize = 11.sp)
+                }
+                DropdownMenu(
+                    expanded = markExpanded,
+                    onDismissRequest = { markExpanded = false }
+                ) {
+                    listOf("nail", "paint", "peg", "bolt", "none").forEach { mark ->
+                        DropdownMenuItem(
+                            text = { Text(mark.uppercase()) },
+                            onClick = {
+                                pointMarkType = mark
+                                markExpanded = false
+                            }
+                        )
+                    }
+                }
+            }
+            Spacer(modifier = Modifier.weight(1f))
+        }
+
+        // ---- Photos ----
         Text("Camera Geotagging & Storage Optimization", fontWeight = FontWeight.SemiBold)
 
         val photoSlots = listOf(
@@ -623,10 +757,13 @@ fun SurveyFormScreen(
             photoSlots.chunked(2).forEach { rowSlots ->
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     rowSlots.forEach { slot ->
+                        val isCaptured = capturedPhotos.contains(slot)
                         OutlinedButton(
                             onClick = {
                                 if (!isValidGcpName(gcpId)) {
-                                    invalidNameMessage = "फोटो खींचने से पहले सही GCP ID डालें (सिर्फ अक्षर, संख्या, -, _)।\n\nPlease enter a valid GCP ID before taking photos (only letters, numbers, -, _)."
+                                    invalidNameMessage =
+                                        "फोटो खींचने से पहले सही GCP ID डालें (सिर्फ अक्षर, संख्या, -, _)।\n\n" +
+                                        "Please enter a valid GCP ID before taking a photo (only letters, numbers, -, _)."
                                     showInvalidNameDialog = true
                                 } else if (!isGpsEnabled(context)) {
                                     showGpsDialog = true
@@ -638,17 +775,34 @@ fun SurveyFormScreen(
                                         put(MediaStore.Images.Media.DISPLAY_NAME, name)
                                         put(MediaStore.Images.Media.MIME_TYPE, "image/jpeg")
                                         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                                            put(MediaStore.Images.Media.RELATIVE_PATH, "Pictures/GCP_Survey/$hierarchyFolder")
+                                            put(
+                                                MediaStore.Images.Media.RELATIVE_PATH,
+                                                "Pictures/GCP_Survey/$hierarchyFolder"
+                                            )
                                         }
                                     }
 
-                                    currentPhotoUri = context.contentResolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values)
-                                    cameraLauncher.launch(currentPhotoUri)
+                                    currentPhotoUri = context.contentResolver.insert(
+                                        MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+                                        values
+                                    )
+                                    if (currentPhotoUri != null) {
+                                        cameraLauncher.launch(currentPhotoUri)
+                                    } else {
+                                        Toast.makeText(context, "Could not create image file", Toast.LENGTH_SHORT).show()
+                                    }
                                 }
                             },
-                            modifier = Modifier.weight(1f)
+                            modifier = Modifier.weight(1f),
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                contentColor = if (isCaptured) Color(0xFF16A34A) else MaterialTheme.colorScheme.primary
+                            )
                         ) {
-                            Icon(Icons.Default.PhotoCamera, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Icon(
+                                if (isCaptured) Icons.Default.CheckCircle else Icons.Default.PhotoCamera,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp)
+                            )
                             Spacer(Modifier.width(4.dp))
                             Text(slot, fontSize = 11.sp, maxLines = 1)
                         }
@@ -660,17 +814,32 @@ fun SurveyFormScreen(
             }
         }
 
+        if (capturedPhotos.isNotEmpty()) {
+            Text("Captured Photos (${capturedPhotos.size}):", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+            capturedPhotos.forEach { p ->
+                Text("• $p", fontSize = 11.sp, fontFamily = FontFamily.Monospace, color = Color(0xFF047857))
+            }
+        }
+
+        // ---- Save button ----
         Button(
             onClick = {
                 if (!isValidGcpName(gcpId)) {
-                    invalidNameMessage = "डेटा सेव करने के लिए सही GCP ID डालें (सिर्फ अक्षर, संख्या, -, _)।\n\nPlease enter a valid GCP ID to save data (only letters, numbers, -, _)."
+                    invalidNameMessage =
+                        "डेटा सेव करने के लिए सही GCP ID डालें (सिर्फ अक्षर, संख्या, -, _)।\n\n" +
+                        "Please enter a valid GCP ID to save the record (only letters, numbers, -, _)."
                     showInvalidNameDialog = true
                     return@Button
                 }
                 if (session.currentGcpLat == null) {
-                    Toast.makeText(context, "Please capture GCP Location first!", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(
+                        context,
+                        "Please capture GCP Location first! / पहले GCP लोकेशन कैप्चर करें!",
+                        Toast.LENGTH_SHORT
+                    ).show()
                     return@Button
                 }
+                isObserving = false
                 val finalEndTime = if (endTimeString.isNotEmpty()) endTimeString else {
                     java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.US).format(java.util.Date())
                 }
@@ -689,67 +858,76 @@ fun SurveyFormScreen(
                     startTime = startTimeString.ifEmpty { finalEndTime },
                     endTime = finalEndTime,
                     totalObservationTime = finalObsTime,
-                    photosJson = capturedPhotos.joinToString(",") // फोटो के नाम यहाँ सेव होंगे
+                    photosJson = capturedPhotos.joinToString(",")
                 )
                 Toast.makeText(context, "Saved GCP $gcpId to SQLite!", Toast.LENGTH_SHORT).show()
                 val num = gcpId.replace("[^0-9]".toRegex(), "").toIntOrNull() ?: 1
                 gcpId = "GCP-" + String.format(Locale.US, "%03d", num + 1)
-                isObserving = false
                 obsSeconds = 0
                 startTimeString = ""
                 endTimeString = ""
-                capturedPhotos.clear() // सेव करने के बाद लिस्ट खाली करें
+                capturedPhotos.clear()
             },
             modifier = Modifier.fillMaxWidth().height(48.dp),
             colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
         ) {
-            Text("Save GCP Record to SQLite Database", fontWeight = FontWeight.Bold)
+            Icon(Icons.Default.Save, contentDescription = null, modifier = Modifier.size(20.dp))
+            Spacer(Modifier.width(8.dp))
+            Text("Save Record to SQLite", fontSize = 15.sp, fontWeight = FontWeight.Bold)
         }
 
-        // GPS Popup (Alert Dialog) - हिंदी + अंग्रेजी
-        if (showGpsDialog) {
-            AlertDialog(
-                onDismissRequest = { showGpsDialog = false },
-                title = { Text("GPS बंद है! (GPS is OFF)", fontWeight = FontWeight.Bold, color = Color.Red) },
-                text = {
-                    Text(
-                        "लोकेशन कैप्चर करने और फोटो में GPS डालने के लिए कृपया अपने फोन का GPS (Location) ऑन करें।\n\n" +
-                        "Please turn ON your phone's GPS (Location) to capture location and geotag photos."
-                    )
-                },
-                confirmButton = {
-                    TextButton(
-                        onClick = {
-                            showGpsDialog = false
-                            context.startActivity(android.content.Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS))
-                        }
-                    ) {
-                        Text("Open Settings")
-                    }
-                },
-                dismissButton = {
-                    TextButton(onClick = { showGpsDialog = false }) {
-                        Text("Cancel")
-                    }
-                }
-            )
-        }
+        Spacer(modifier = Modifier.height(24.dp))
+    }
 
-        // गलत GCP ID वाला Popup - हिंदी + अंग्रेजी
-        if (showInvalidNameDialog) {
-            AlertDialog(
-                onDismissRequest = { showInvalidNameDialog = false },
-                title = { Text("गलत GCP ID! (Invalid GCP ID!)", fontWeight = FontWeight.Bold, color = Color.Red) },
-                text = { Text(invalidNameMessage) },
-                confirmButton = {
-                    TextButton(onClick = { showInvalidNameDialog = false }) {
-                        Text("OK")
+    // ---- GPS disabled dialog ----
+    if (showGpsDialog) {
+        AlertDialog(
+            onDismissRequest = { showGpsDialog = false },
+            title = { Text("GPS Disabled / GPS बंद है") },
+            text = {
+                Text(
+                    "कृपया GPS चालू करें ताकि सटीक लोकेशन कैप्चर हो सके।\n\n" +
+                    "Please turn on GPS/Location to capture accurate coordinates."
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    showGpsDialog = false
+                    try {
+                        context.startActivity(
+                            android.content.Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS)
+                        )
+                    } catch (_: Exception) {
+                        Toast.makeText(context, "Could not open settings", Toast.LENGTH_SHORT).show()
                     }
+                }) {
+                    Text("Open Settings")
                 }
-            )
-        }
+            },
+            dismissButton = {
+                TextButton(onClick = { showGpsDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
+    // ---- Invalid GCP ID dialog ----
+    if (showInvalidNameDialog) {
+        AlertDialog(
+            onDismissRequest = { showInvalidNameDialog = false },
+            title = { Text("Invalid GCP ID / अमान्य GCP ID") },
+            text = { Text(invalidNameMessage) },
+            confirmButton = {
+                TextButton(onClick = { showInvalidNameDialog = false }) {
+                    Text("OK")
+                }
+            }
+        )
     }
 }
+
+// ===================== Records List =====================
 
 @Composable
 fun RecordsListScreen(
@@ -757,89 +935,241 @@ fun RecordsListScreen(
     viewModel: SurveyViewModel,
     onOpenTransferHub: () -> Unit
 ) {
-    Column(modifier = Modifier.fillMaxSize()) {
-        Card(
-            modifier = Modifier.fillMaxWidth().padding(16.dp),
-            colors = CardDefaults.cardColors(containerColor = Color(0xFFF0FDF4))
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(12.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column {
-                    Text("Total Saved Points: ${records.size}", fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                    Text("Ready for Wireless Laptop Sync", fontSize = 11.sp, color = Color(0xFF15803D))
-                }
-                Button(
-                    onClick = onOpenTransferHub,
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF059669))
-                ) {
-                    Icon(Icons.Default.Laptop, contentDescription = null, modifier = Modifier.size(16.dp))
-                    Spacer(Modifier.width(4.dp))
-                    Text("Transfer Hub", fontSize = 11.sp)
-                }
-            }
+    val context = LocalContext.current
+    var searchQuery by remember { mutableStateOf("") }
+    var showDeleteDialog by remember { mutableStateOf(false) }
+    var pendingDeleteId by remember { mutableStateOf<Long?>(null) }
+
+    val filtered = remember(records, searchQuery) {
+        if (searchQuery.isBlank()) records
+        else records.filter {
+            it.gcpId.contains(searchQuery, ignoreCase = true) ||
+            it.projectName.contains(searchQuery, ignoreCase = true) ||
+            it.operatorName.contains(searchQuery, ignoreCase = true) ||
+            it.city.contains(searchQuery, ignoreCase = true)
         }
+    }
 
-        if (records.isEmpty()) {
-            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text("No GCP records saved yet. Capture points in the Survey tab.", color = Color.Gray)
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        // ---- Search bar ----
+        OutlinedTextField(
+            value = searchQuery,
+            onValueChange = { searchQuery = it },
+            label = { Text("Search records...") },
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true,
+            leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+            trailingIcon = {
+                if (searchQuery.isNotEmpty()) {
+                    IconButton(onClick = { searchQuery = "" }) {
+                        Icon(Icons.Default.Clear, contentDescription = "Clear")
+                    }
+                }
             }
-        } else {
-            LazyColumn(
-                modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                items(records) { record ->
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
-                    ) {
-                        Column(modifier = Modifier.padding(14.dp)) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Text(record.gcpId, fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                                Text(record.pointStatus.uppercase(), fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                            }
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Text(
-                                "Lat: ${record.latitude.format(6)}, Lon: ${record.longitude.format(6)}",
-                                fontFamily = FontFamily.Monospace,
-                                fontSize = 12.sp
-                            )
+        )
 
-                            Text(
-                                "From: ${if (record.previousPointType == "hotel") "Hotel" else record.previousPointId} -> To: ${record.gcpId}",
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.secondary
+        // ---- Empty state OR list ----
+        if (filtered.isEmpty()) {
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Icon(
+                        Icons.Default.Inbox,
+                        contentDescription = null,
+                        modifier = Modifier.size(48.dp),
+                        tint = Color.Gray
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        if (records.isEmpty()) "No records yet. Add your first survey!"
+                        else "No records match your search.",
+                        color = Color.Gray,
+                        fontSize = 13.sp
+                    )
+                    if (records.isEmpty()) {
+                        Spacer(Modifier.height(12.dp))
+                        FilledTonalButton(onClick = onOpenTransferHub) {
+                            Icon(
+                                Icons.Default.Laptop,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp)
                             )
-                            Text(
-                                "Segment: ${String.format(Locale.US, "%.2f", record.segmentDistanceMeters)}m | Total: ${String.format(Locale.US, "%.2f", record.accumulatedDistanceMeters)}m",
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Medium,
-                                color = MaterialTheme.colorScheme.primary
-                            )
-                            Text(
-                                "Project: ${record.projectName} • ${record.city} • Ant: ${record.antennaHeight}m",
-                                fontSize = 11.sp,
-                                color = Color.DarkGray
-                            )
-                            Text(
-                                "Path: ${record.folderPath}",
-                                fontSize = 10.sp,
-                                fontFamily = FontFamily.Monospace,
-                                color = Color.Gray
-                            )
+                            Spacer(Modifier.width(6.dp))
+                            Text("Transfer to Laptop")
                         }
                     }
                 }
             }
+        } else {
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                items(filtered, key = { it.id }) { record ->
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = Color(0xFFF8FAFC)),
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(modifier = Modifier.padding(12.dp)) {
+
+                            // ---- Header: GCP ID + station chip + delete ----
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    record.gcpId,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 15.sp,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    AssistChip(
+                                        onClick = {},
+                                        label = {
+                                            Text(
+                                                record.stationType.uppercase(),
+                                                fontSize = 10.sp
+                                            )
+                                        }
+                                    )
+                                    Spacer(Modifier.width(6.dp))
+                                    IconButton(
+                                        onClick = {
+                                            pendingDeleteId = record.id
+                                            showDeleteDialog = true
+                                        },
+                                        modifier = Modifier.size(24.dp)
+                                    ) {
+                                        Icon(
+                                            Icons.Default.Delete,
+                                            contentDescription = "Delete",
+                                            tint = Color.Red,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    }
+                                }
+                            }
+
+                            // ---- Project + City + Operator ----
+                            Spacer(Modifier.height(4.dp))
+                            Text(
+                                "${record.projectName} • ${record.city}",
+                                fontSize = 12.sp,
+                                color = Color.DarkGray
+                            )
+                            Text(
+                                "Operator: ${record.operatorName}",
+                                fontSize = 11.sp,
+                                color = Color.Gray
+                            )
+
+                            // ---- Coordinates row ----
+                            Spacer(Modifier.height(6.dp))
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text(
+                                    "Lat: ${record.latitude.format(6)}",
+                                    fontSize = 10.sp,
+                                    fontFamily = FontFamily.Monospace
+                                )
+                                Text(
+                                    "Lon: ${record.longitude.format(6)}",
+                                    fontSize = 10.sp,
+                                    fontFamily = FontFamily.Monospace
+                                )
+                                Text(
+                                    "Acc: ${record.accuracy?.format(1) ?: "-"}m",
+                                    fontSize = 10.sp,
+                                    fontFamily = FontFamily.Monospace
+                                )
+                            }
+
+                            // ---- Mode / Obs / Status row ----
+                            Spacer(Modifier.height(4.dp))
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text(
+                                    "Mode: ${record.surveyMode.uppercase()}",
+                                    fontSize = 10.sp,
+                                    color = Color(0xFF0369A1),
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                                Text(
+                                    "Obs: ${record.totalObservationTime}",
+                                    fontSize = 10.sp,
+                                    color = Color(0xFF0D9488),
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                                Text(
+                                    "Status: ${record.pointStatus.uppercase()}",
+                                    fontSize = 10.sp,
+                                    color = if (record.pointStatus == "normal") Color(0xFF16A34A) else Color(0xFFDC2626),
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                            }
+
+                            // ---- Photo count ----
+                            if (!record.photosJson.isNullOrBlank()) {
+                                Spacer(Modifier.height(4.dp))
+                                Text(
+                                    "Photos: ${record.photosJson.split(",").size}",
+                                    fontSize = 10.sp,
+                                    color = Color(0xFF047857)
+                                )
+                            }
+                        }
+                    }
+                }
+                // Bottom padding so last card isn't hidden by bottom nav
+                item { Spacer(Modifier.height(80.dp)) }
+            }
         }
     }
-}
 
-fun Double.format(digits: Int) = String.format(Locale.US, "%.${digits}f", this)
+    // ---- Delete confirmation dialog ----
+    if (showDeleteDialog && pendingDeleteId != null) {
+        AlertDialog(
+            onDismissRequest = {
+                showDeleteDialog = false
+                pendingDeleteId = null
+            },
+            title = { Text("Delete Record?") },
+            text = { Text("This action cannot be undone. / यह क्रिया पूर्ववत नहीं की जा सकती।") },
+            confirmButton = {
+                TextButton(onClick = {
+                    pendingDeleteId?.let { id ->
+                        viewModel.deleteRecord(id)
+                        Toast.makeText(context, "Record deleted", Toast.LENGTH_SHORT).show()
+                    }
+                    showDeleteDialog = false
+                    pendingDeleteId = null
+                }) {
+                    Text("Delete", color = Color.Red)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    showDeleteDialog = false
+                    pendingDeleteId = null
+                }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+}
+// ✅ File end
