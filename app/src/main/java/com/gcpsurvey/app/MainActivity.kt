@@ -69,8 +69,6 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-// ===================== Helper functions =====================
-
 fun isValidGcpName(name: String): Boolean {
     if (name.isBlank()) return false
     return Regex("^[A-Za-z0-9_-]+$").matches(name.trim())
@@ -107,7 +105,8 @@ fun getFileFromUri(context: Context, uri: Uri): File? {
 fun Double.format(decimals: Int): String =
     String.format(Locale.US, "%.${decimals}f", this)
 
-// ===================== App root =====================
+fun Float.format(decimals: Int): String =
+    String.format(Locale.US, "%.${decimals}f", this)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -303,7 +302,6 @@ fun GcpSurveyApp(viewModel: SurveyViewModel) {
         }
     }
 }
-
 // ===================== Survey Form =====================
 
 @Composable
@@ -742,8 +740,7 @@ fun SurveyFormScreen(
             }
             Spacer(modifier = Modifier.weight(1f))
         }
-
-        // ---- Photos ----
+                // ---- Photos ----
         Text("Camera Geotagging & Storage Optimization", fontWeight = FontWeight.SemiBold)
 
         val photoSlots = listOf(
@@ -1074,6 +1071,7 @@ fun RecordsListScreen(
                             )
 
                             // ---- Coordinates row ----
+                            // ✅ FIX (line 1093): accuracy nullable Double hai
                             Spacer(Modifier.height(6.dp))
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
@@ -1090,7 +1088,7 @@ fun RecordsListScreen(
                                     fontFamily = FontFamily.Monospace
                                 )
                                 Text(
-                                    "Acc: ${record.accuracy?.format(1) ?: "-"}m",
+                                    "Acc: ${record.accuracy?.let { it.format(1) } ?: "-"}m",
                                     fontSize = 10.sp,
                                     fontFamily = FontFamily.Monospace
                                 )
@@ -1134,7 +1132,6 @@ fun RecordsListScreen(
                         }
                     }
                 }
-                // Bottom padding so last card isn't hidden by bottom nav
                 item { Spacer(Modifier.height(80.dp)) }
             }
         }
@@ -1173,3 +1170,5 @@ fun RecordsListScreen(
     }
 }
 // ✅ File end
+
+        
